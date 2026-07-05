@@ -42,3 +42,8 @@ tools\build_organized_workbook.ps1
 That runner uses Node with `--max-old-space-size=8192` for the large workbook
 export, then runs the workbook finalizer that restores frozen header rows.
 
+
+## GitHub Workflow
+
+Repository commits and pushes follow the rules in `docs/github-workflow-rules.md`.
+After every verified successful update, commit the intended files and push the active branch to `origin`.
