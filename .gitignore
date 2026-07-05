@@ -31,3 +31,4 @@ crm-app/dist/
 crm-app/.env.local
 crm-app/.env.*.local
 crm-app/coverage/
+dist/
