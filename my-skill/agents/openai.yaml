@@ -1,0 +1,7 @@
+interface:
+  display_name: "LRM Workspace Skill"
+  short_description: "Guides CRM workspace implementation"
+  default_prompt: "Use $my-skill to implement or verify Lead Relationship Manager workspace changes."
+
+policy:
+  allow_implicit_invocation: true
