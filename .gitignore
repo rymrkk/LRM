@@ -25,3 +25,9 @@ data/processed/workbook-previews/
 
 ~$*.xlsx
 data/processed/*.xlsx
+
+# Frontend app artifacts
+crm-app/dist/
+crm-app/.env.local
+crm-app/.env.*.local
+crm-app/coverage/
