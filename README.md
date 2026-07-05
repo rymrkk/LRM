@@ -47,3 +47,8 @@ export, then runs the workbook finalizer that restores frozen header rows.
 
 Repository commits and pushes follow the rules in `docs/github-workflow-rules.md`.
 After every verified successful update, commit the intended files and push the active branch to `origin`.
+
+## Application Specification
+
+The enterprise-grade CRM application specification is documented in `docs/crm-application-specification.md`.
+It covers product scope, workflows, architecture, Supabase requirements, testing, security, operations, and maintainability.
