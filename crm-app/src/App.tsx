@@ -189,6 +189,29 @@ function getColumnValue(contact: ContactRecord, column: ContactColumnKey) {
   return contact[column] ?? ''
 }
 
+function getColumnWidth(column: ContactColumnKey) {
+  const columnWidths: Partial<Record<ContactColumnKey, string>> = {
+    name: '150px',
+    job_title: '150px',
+    seniority: '110px',
+    company_name: '170px',
+    email: '220px',
+    best_phone: '130px',
+    city: '110px',
+    country: '120px',
+    job_function: '180px',
+    job_sector: '220px',
+    employees: '110px',
+    employee_range: '150px',
+    state: '140px',
+    postal_code: '120px',
+    executive_linkedin_profile: '200px',
+    sources: '180px',
+  }
+
+  return columnWidths[column] ?? '140px'
+}
+
 function App() {
   const [activeView, setActiveView] = useState<ViewKey>('contacts')
   const [selectedContact, setSelectedContact] = useState<ContactRecord | null>(null)
@@ -361,6 +384,13 @@ function ContactsPage({
   totalCount,
 }: ContactsPageProps) {
   const tableRef = useRef<HTMLDivElement>(null)
+  const allColumns = useMemo(() => [...DEFAULT_VISIBLE_COLUMNS, ...OPTIONAL_COLUMNS], [])
+  const [visibleColumns, setVisibleColumns] = useState<ContactColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
+  const [draftVisibleColumns, setDraftVisibleColumns] = useState<ContactColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
+  const gridTemplateColumns = useMemo(
+    () => visibleColumns.map((column) => getColumnWidth(column)).join(' '),
+    [visibleColumns],
+  )
   const shouldVirtualize = contacts.length > 50
   const rowVirtualizer = useVirtualizer({
     count: contacts.length,
@@ -371,6 +401,25 @@ function ContactsPage({
     overscan: 8,
   })
   const virtualRows = rowVirtualizer.getVirtualItems()
+
+  function toggleDraftColumn(column: ContactColumnKey) {
+    setDraftVisibleColumns((currentColumns) => {
+      if (currentColumns.includes(column)) {
+        return currentColumns.filter((currentColumn) => currentColumn !== column)
+      }
+
+      return allColumns.filter((currentColumn) => [...currentColumns, column].includes(currentColumn))
+    })
+  }
+
+  function applyColumns() {
+    setVisibleColumns(draftVisibleColumns.length > 0 ? draftVisibleColumns : DEFAULT_VISIBLE_COLUMNS)
+  }
+
+  function resetColumns() {
+    setDraftVisibleColumns(DEFAULT_VISIBLE_COLUMNS)
+    setVisibleColumns(DEFAULT_VISIBLE_COLUMNS)
+  }
 
   return (
     <section className="workbench" id="contacts" aria-label="All contacts workspace">
@@ -421,8 +470,8 @@ function ContactsPage({
           <p>Search and filters are applied in memory from the active workspace data source.</p>
         </div>
         <div className="mock-table virtual-table" role="table" aria-label="All Contacts" ref={tableRef}>
-          <div className="mock-row mock-head" role="row">
-            {DEFAULT_VISIBLE_COLUMNS.map((column) => (
+          <div className="mock-row mock-head" role="row" style={{ gridTemplateColumns }}>
+            {visibleColumns.map((column) => (
               <span role="columnheader" key={column}>
                 {labelForColumn(column)}
               </span>
@@ -433,11 +482,11 @@ function ContactsPage({
               {virtualRows.map((virtualRow) => {
                 const contact = contacts[virtualRow.index]
 
-                return <ContactTableRow contact={contact} key={contact.id} onOpenContact={onOpenContact} style={{ transform: `translateY(${virtualRow.start}px)` }} virtualized />
+                return <ContactTableRow contact={contact} gridTemplateColumns={gridTemplateColumns} key={contact.id} onOpenContact={onOpenContact} style={{ transform: `translateY(${virtualRow.start}px)` }} virtualized visibleColumns={visibleColumns} />
               })}
             </div>
           ) : (
-            contacts.map((contact) => <ContactTableRow contact={contact} key={contact.id} onOpenContact={onOpenContact} />)
+            contacts.map((contact) => <ContactTableRow contact={contact} gridTemplateColumns={gridTemplateColumns} key={contact.id} onOpenContact={onOpenContact} visibleColumns={visibleColumns} />)
           )}
         </div>
       </section>
@@ -450,14 +499,21 @@ function ContactsPage({
         </div>
         <p className="panel-copy">Preferences will persist by workspace after the storage layer lands.</p>
         <div className="column-list">
-          {[...DEFAULT_VISIBLE_COLUMNS, ...OPTIONAL_COLUMNS].map((column) => (
+          {allColumns.map((column) => (
             <label className="check-row" key={column}>
-              <input defaultChecked={DEFAULT_VISIBLE_COLUMNS.includes(column)} type="checkbox" />
+              <input
+                checked={draftVisibleColumns.includes(column)}
+                onChange={() => toggleDraftColumn(column)}
+                type="checkbox"
+              />
               <span>{labelForColumn(column)}</span>
             </label>
           ))}
         </div>
-        <button className="secondary-action" type="button">
+        <button className="primary-action" type="button" onClick={applyColumns}>
+          Apply columns
+        </button>
+        <button className="secondary-action" type="button" onClick={resetColumns}>
           Reset columns
         </button>
       </fieldset>
@@ -467,15 +523,28 @@ function ContactsPage({
 
 type ContactTableRowProps = {
   contact: ContactRecord
+  gridTemplateColumns: string
   onOpenContact: (contact: ContactRecord) => void
   style?: CSSProperties
   virtualized?: boolean
+  visibleColumns: ContactColumnKey[]
 }
 
-function ContactTableRow({ contact, onOpenContact, style, virtualized = false }: ContactTableRowProps) {
+function ContactTableRow({
+  contact,
+  gridTemplateColumns,
+  onOpenContact,
+  style,
+  virtualized = false,
+  visibleColumns,
+}: ContactTableRowProps) {
   return (
-    <div className={`mock-row ${virtualized ? 'virtual-row' : ''}`} role="row" style={style}>
-      {DEFAULT_VISIBLE_COLUMNS.map((column) => (
+    <div
+      className={`mock-row ${virtualized ? 'virtual-row' : ''}`}
+      role="row"
+      style={{ ...style, gridTemplateColumns }}
+    >
+      {visibleColumns.map((column) => (
         <span role="cell" key={column}>
           {column === 'name' ? (
             <button className="contact-row-button" type="button" onClick={() => onOpenContact(contact)}>

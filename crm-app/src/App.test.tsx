@@ -87,6 +87,25 @@ describe('App shell', () => {
     expect(screen.queryByRole('button', { name: /open jordan lee/i })).not.toBeInTheDocument()
   })
 
+  it('applies column picker changes only after clicking Apply columns', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    const countryToggle = screen.getByRole('checkbox', { name: /country/i })
+    expect(countryToggle).toBeChecked()
+    expect(screen.getByRole('columnheader', { name: /country/i })).toBeInTheDocument()
+
+    await user.click(countryToggle)
+
+    expect(countryToggle).not.toBeChecked()
+    expect(screen.getByRole('columnheader', { name: /country/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /apply columns/i }))
+
+    expect(screen.queryByRole('columnheader', { name: /country/i })).not.toBeInTheDocument()
+  })
+
   it('opens the contact detail drawer from a contact row', async () => {
     const user = userEvent.setup()
 

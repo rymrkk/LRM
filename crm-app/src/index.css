@@ -661,6 +661,7 @@ a {
   padding: 0 6px;
 }
 
+.column-picker .primary-action,
 .column-picker .secondary-action {
   width: 100%;
 }
