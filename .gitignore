@@ -1,0 +1,27 @@
+﻿# Sensitive lead data and generated outputs
+data/raw/*.csv
+data/processed/*.csv
+data/processed/*.json
+data/processed/*.ndjson
+data/processed/*.log
+data/processed/*.md
+
+# Local Python/runtime artifacts
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# OS/editor noise
+Thumbs.db
+.DS_Store
+
+# Test scratch artifacts
+tests/.tmp/
+tests/write_probe.txt
+node_modules/
+data/processed/workbook-previews/
+
+
+~$*.xlsx
+data/processed/*.xlsx
