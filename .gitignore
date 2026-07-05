@@ -1,4 +1,4 @@
-﻿# Sensitive lead data and generated outputs
+# Sensitive lead data and generated outputs
 data/raw/*.csv
 data/processed/*.csv
 data/processed/*.json
@@ -32,3 +32,6 @@ crm-app/.env.local
 crm-app/.env.*.local
 crm-app/coverage/
 dist/
+
+# Local CRM static data export
+crm-app/public/data/contacts.json

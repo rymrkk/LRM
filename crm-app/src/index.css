@@ -244,6 +244,12 @@ a {
   outline: none;
 }
 
+.filter-chip.active {
+  color: oklch(1 0 0);
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
 .content {
   min-width: 0;
   padding: 22px;
@@ -339,17 +345,35 @@ a {
 }
 
 .filter-panel,
-.table-surface,
 .detail-drawer {
   min-width: 0;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
 }
 
-.filter-panel,
-.detail-drawer {
-  padding: 16px;
+.virtual-table {
+  max-height: 560px;
+  overflow: auto;
+}
+
+.virtual-table .mock-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.virtual-body {
+  position: relative;
+  min-width: 1160px;
+}
+
+.virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 .section-title {

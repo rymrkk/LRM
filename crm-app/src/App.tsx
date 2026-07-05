@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   Building2,
   Columns3,
@@ -14,6 +14,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   APP_NAME,
   DEFAULT_VISIBLE_COLUMNS,
@@ -22,6 +23,7 @@ import {
   INITIAL_EXPECTED_ROW_COUNT,
   OPTIONAL_COLUMNS,
 } from './lib/constants'
+import { buildContactsWorkspace, deriveBestPhone, loadContactsJson } from './lib/data'
 import type { CompanySummary, ContactColumnKey, ContactRecord } from './types/contact'
 import type { FilterKey, SavedList } from './types/workspace'
 
@@ -39,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'saved-lists', label: 'Saved Lists', icon: ListChecks },
 ]
 
-const FILTER_OPTIONS: Record<FilterKey, string[]> = {
+const FALLBACK_FILTER_OPTIONS: Record<FilterKey, string[]> = {
   seniority: ['Executive', 'Director', 'Head', 'Founder'],
   job_function: ['Sales', 'IT', 'Operations', 'Leadership'],
   job_sector: ['Software', 'Consulting', 'Data Services'],
@@ -48,7 +50,7 @@ const FILTER_OPTIONS: Record<FilterKey, string[]> = {
   employee_range: ['51-200', '201-500', '501-1000'],
 }
 
-const CONTACTS: ContactRecord[] = [
+const SAMPLE_CONTACTS: ContactRecord[] = [
   {
     id: 'lead-001',
     name: 'Maria Santos',
@@ -69,7 +71,7 @@ const CONTACTS: ContactRecord[] = [
     postal_code: '78701',
     recordPath: '10124-users.cleaned.csv:124',
     sources: 'LinkedIn, company website',
-    data_source: 'cleaned CSV',
+    data_source: 'sample fallback',
   },
   {
     id: 'lead-002',
@@ -89,7 +91,7 @@ const CONTACTS: ContactRecord[] = [
     postal_code: '98101',
     recordPath: '10124-users.cleaned.csv:511',
     sources: 'Event list',
-    data_source: 'cleaned CSV',
+    data_source: 'sample fallback',
   },
   {
     id: 'lead-003',
@@ -109,7 +111,7 @@ const CONTACTS: ContactRecord[] = [
     postal_code: '02108',
     recordPath: '10124-users.cleaned.csv:902',
     sources: 'Partner export',
-    data_source: 'cleaned CSV',
+    data_source: 'sample fallback',
   },
   {
     id: 'lead-004',
@@ -129,7 +131,7 @@ const CONTACTS: ContactRecord[] = [
     postal_code: '80202',
     recordPath: '10124-users.cleaned.csv:1118',
     sources: 'Founder list',
-    data_source: 'cleaned CSV',
+    data_source: 'sample fallback',
   },
 ]
 
@@ -179,39 +181,50 @@ function labelForColumn(column: ContactColumnKey) {
   return COLUMN_LABELS[column] ?? column.replaceAll('_', ' ')
 }
 
-function getBestPhone(contact: ContactRecord) {
-  return contact.mobile_phone || contact.desk_phone || contact.corporate_phone || ''
-}
-
 function getColumnValue(contact: ContactRecord, column: ContactColumnKey) {
   if (column === 'best_phone') {
-    return getBestPhone(contact)
+    return deriveBestPhone(contact)
   }
 
   return contact[column] ?? ''
 }
 
-function buildCompanySummaries(contacts: ContactRecord[]): CompanySummary[] {
-  const companies = new Map<string, ContactRecord[]>()
-
-  contacts.forEach((contact) => {
-    const companyName = contact.company_name || 'Unknown company'
-    companies.set(companyName, [...(companies.get(companyName) ?? []), contact])
-  })
-
-  return Array.from(companies.entries()).map(([company_name, contactsForCompany]) => ({
-    company_name,
-    contact_count: contactsForCompany.length,
-    contacts: contactsForCompany,
-    countries: Array.from(new Set(contactsForCompany.map((contact) => contact.country).filter(Boolean) as string[])),
-    employee_range: contactsForCompany.find((contact) => contact.employee_range)?.employee_range,
-  }))
-}
-
 function App() {
   const [activeView, setActiveView] = useState<ViewKey>('contacts')
   const [selectedContact, setSelectedContact] = useState<ContactRecord | null>(null)
-  const companies = useMemo(() => buildCompanySummaries(CONTACTS), [])
+  const [contacts, setContacts] = useState<ContactRecord[]>(SAMPLE_CONTACTS)
+  const [filters, setFilters] = useState<Partial<Record<FilterKey, string[]>>>({})
+  const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    if (typeof fetch !== 'function') return
+
+    let isMounted = true
+
+    loadContactsJson(fetch, '/data/contacts.json', SAMPLE_CONTACTS).then((result) => {
+      if (isMounted && result.source === 'static-json') setContacts(result.contacts)
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const workspace = useMemo(
+    () => buildContactsWorkspace(contacts, { filters, searchQuery }),
+    [contacts, filters, searchQuery],
+  )
+
+  function toggleFilter(filter: FilterKey, value: string) {
+    setFilters((currentFilters) => {
+      const currentValues = currentFilters[filter] ?? []
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((currentValue) => currentValue !== value)
+        : [...currentValues, value]
+
+      return { ...currentFilters, [filter]: nextValues }
+    })
+  }
 
   return (
     <main className="app-shell">
@@ -277,7 +290,11 @@ function App() {
           <label className="search-box">
             <Search size={18} aria-hidden="true" />
             <span className="sr-only">Search contacts</span>
-            <input placeholder="Search name, email, or company" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search name, email, or company"
+            />
           </label>
           <button className="secondary-action" type="button">
             <Columns3 size={16} aria-hidden="true" />
@@ -287,7 +304,7 @@ function App() {
 
         <section className="summary-strip" aria-label="Workspace summary">
           <div>
-            <p className="metric-value">1,204</p>
+            <p className="metric-value">{workspace.filteredCount.toLocaleString()}</p>
             <p className="metric-label">currently shown</p>
           </div>
           <div>
@@ -304,8 +321,18 @@ function App() {
           </div>
         </section>
 
-        {activeView === 'contacts' && <ContactsPage onOpenContact={setSelectedContact} />}
-        {activeView === 'companies' && <CompaniesPage companies={companies} />}
+        {activeView === 'contacts' && (
+          <ContactsPage
+            contacts={workspace.contacts}
+            filterOptions={workspace.filterOptions}
+            filters={filters}
+            filteredCount={workspace.filteredCount}
+            onOpenContact={setSelectedContact}
+            onToggleFilter={toggleFilter}
+            totalCount={workspace.totalCount}
+          />
+        )}
+        {activeView === 'companies' && <CompaniesPage companies={workspace.companies} />}
         {activeView === 'saved-lists' && <SavedListsPage savedLists={SAVED_LISTS} />}
       </section>
 
@@ -315,10 +342,36 @@ function App() {
 }
 
 type ContactsPageProps = {
+  contacts: ContactRecord[]
+  filterOptions: Record<FilterKey, string[]>
+  filters: Partial<Record<FilterKey, string[]>>
+  filteredCount: number
   onOpenContact: (contact: ContactRecord) => void
+  onToggleFilter: (filter: FilterKey, value: string) => void
+  totalCount: number
 }
 
-function ContactsPage({ onOpenContact }: ContactsPageProps) {
+function ContactsPage({
+  contacts,
+  filterOptions,
+  filters,
+  filteredCount,
+  onOpenContact,
+  onToggleFilter,
+  totalCount,
+}: ContactsPageProps) {
+  const tableRef = useRef<HTMLDivElement>(null)
+  const shouldVirtualize = contacts.length > 50
+  const rowVirtualizer = useVirtualizer({
+    count: contacts.length,
+    enabled: shouldVirtualize,
+    estimateSize: () => 51,
+    getScrollElement: () => tableRef.current,
+    initialRect: { height: 520, width: 1160 },
+    overscan: 8,
+  })
+  const virtualRows = rowVirtualizer.getVirtualItems()
+
   return (
     <section className="workbench" id="contacts" aria-label="All contacts workspace">
       <section className="filter-panel" aria-label="Filters">
@@ -332,11 +385,23 @@ function ContactsPage({ onOpenContact }: ContactsPageProps) {
             <div className="filter-group" key={filter}>
               <p className="filter-label">{labelForColumn(filter)}</p>
               <div className="filter-list">
-                {FILTER_OPTIONS[filter].slice(0, 3).map((option) => (
-                  <button className="filter-chip" type="button" key={option}>
-                    {option}
-                  </button>
-                ))}
+                {(filterOptions[filter].length > 0 ? filterOptions[filter] : FALLBACK_FILTER_OPTIONS[filter])
+                  .slice(0, 5)
+                  .map((option) => {
+                    const isActive = filters[filter]?.includes(option) ?? false
+
+                    return (
+                      <button
+                        aria-pressed={isActive}
+                        className={`filter-chip ${isActive ? 'active' : ''}`}
+                        type="button"
+                        key={option}
+                        onClick={() => onToggleFilter(filter, option)}
+                      >
+                        {option}
+                      </button>
+                    )
+                  })}
               </div>
             </div>
           ))}
@@ -351,11 +416,11 @@ function ContactsPage({ onOpenContact }: ContactsPageProps) {
         <div className="table-header">
           <div>
             <p className="eyebrow">All Contacts</p>
-            <h2>1,204 of {INITIAL_EXPECTED_ROW_COUNT.toLocaleString()} shown</h2>
+            <h2>{filteredCount.toLocaleString()} of {totalCount.toLocaleString()} shown</h2>
           </div>
-          <p>Virtualized rows will mount here when the CSV data engine is connected.</p>
+          <p>Search and filters are applied in memory from the active workspace data source.</p>
         </div>
-        <div className="mock-table" role="table" aria-label="All Contacts">
+        <div className="mock-table virtual-table" role="table" aria-label="All Contacts" ref={tableRef}>
           <div className="mock-row mock-head" role="row">
             {DEFAULT_VISIBLE_COLUMNS.map((column) => (
               <span role="columnheader" key={column}>
@@ -363,22 +428,17 @@ function ContactsPage({ onOpenContact }: ContactsPageProps) {
               </span>
             ))}
           </div>
-          {CONTACTS.map((contact) => (
-            <div className="mock-row" role="row" key={contact.id}>
-              {DEFAULT_VISIBLE_COLUMNS.map((column) => (
-                <span role="cell" key={column}>
-                  {column === 'name' ? (
-                    <button className="contact-row-button" type="button" onClick={() => onOpenContact(contact)}>
-                      <span>{contact.name}</span>
-                      <span className="sr-only">Open {contact.name}</span>
-                    </button>
-                  ) : (
-                    getColumnValue(contact, column)
-                  )}
-                </span>
-              ))}
+          {shouldVirtualize ? (
+            <div className="virtual-body" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+              {virtualRows.map((virtualRow) => {
+                const contact = contacts[virtualRow.index]
+
+                return <ContactTableRow contact={contact} key={contact.id} onOpenContact={onOpenContact} style={{ transform: `translateY(${virtualRow.start}px)` }} virtualized />
+              })}
             </div>
-          ))}
+          ) : (
+            contacts.map((contact) => <ContactTableRow contact={contact} key={contact.id} onOpenContact={onOpenContact} />)
+          )}
         </div>
       </section>
 
@@ -405,6 +465,31 @@ function ContactsPage({ onOpenContact }: ContactsPageProps) {
   )
 }
 
+type ContactTableRowProps = {
+  contact: ContactRecord
+  onOpenContact: (contact: ContactRecord) => void
+  style?: CSSProperties
+  virtualized?: boolean
+}
+
+function ContactTableRow({ contact, onOpenContact, style, virtualized = false }: ContactTableRowProps) {
+  return (
+    <div className={`mock-row ${virtualized ? 'virtual-row' : ''}`} role="row" style={style}>
+      {DEFAULT_VISIBLE_COLUMNS.map((column) => (
+        <span role="cell" key={column}>
+          {column === 'name' ? (
+            <button className="contact-row-button" type="button" onClick={() => onOpenContact(contact)}>
+              <span>{contact.name}</span>
+              <span className="sr-only">Open {contact.name}</span>
+            </button>
+          ) : (
+            getColumnValue(contact, column)
+          )}
+        </span>
+      ))}
+    </div>
+  )
+}
 type CompaniesPageProps = {
   companies: CompanySummary[]
 }
@@ -480,6 +565,8 @@ type ContactDetailDrawerProps = {
 }
 
 function ContactDetailDrawer({ contact, onClose }: ContactDetailDrawerProps) {
+  const bestPhone = deriveBestPhone(contact)
+
   return (
     <aside className="detail-drawer drawer-open" role="dialog" aria-label="Contact detail" aria-modal="false">
       <div className="drawer-header">
@@ -501,10 +588,10 @@ function ContactDetailDrawer({ contact, onClose }: ContactDetailDrawerProps) {
               {contact.email}
             </a>
           )}
-          {getBestPhone(contact) && (
-            <a href={`tel:${getBestPhone(contact).replaceAll(' ', '')}`}>
+          {bestPhone && (
+            <a href={`tel:${bestPhone.replaceAll(' ', '')}`}>
               <Phone size={16} aria-hidden="true" />
-              {getBestPhone(contact)}
+              {bestPhone}
             </a>
           )}
         </div>

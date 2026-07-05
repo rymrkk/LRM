@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "data:export": "node scripts/export-contacts-json.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

@@ -20,6 +20,21 @@ export type ContactFilterCriteria = {
   searchQuery?: string
 }
 
+export type ContactsWorkspace = {
+  contacts: ContactRecord[]
+  companies: CompanySummary[]
+  filterOptions: ContactFilters
+  filteredCount: number
+  totalCount: number
+}
+
+export type ContactsJsonLoadResult = {
+  contacts: ContactRecord[]
+  source: 'static-json' | 'fallback'
+}
+
+export type ContactsJsonFetcher = (url: string) => Promise<Pick<Response, 'ok' | 'json' | 'status'>>
+
 const CONTACT_FIELD_KEYS = [
   'id',
   'name',
@@ -254,6 +269,47 @@ export function groupContactsByCompany(contacts: readonly ContactRecord[]): Comp
     .sort((a, b) => sortText(a.company_name, b.company_name))
 }
 
+export function buildContactsWorkspace(
+  contacts: readonly ContactRecord[],
+  criteria: ContactFilterCriteria = {},
+): ContactsWorkspace {
+  const filteredContacts = filterContacts(contacts, criteria)
+
+  return {
+    contacts: filteredContacts,
+    companies: groupContactsByCompany(filteredContacts),
+    filterOptions: extractFilterOptions(contacts),
+    filteredCount: filteredContacts.length,
+    totalCount: contacts.length,
+  }
+}
+
+export async function loadContactsJson(
+  fetcher: ContactsJsonFetcher,
+  url = '/data/contacts.json',
+  fallbackContacts: readonly ContactRecord[] = [],
+): Promise<ContactsJsonLoadResult> {
+  try {
+    const response = await fetcher(url)
+
+    if (!response.ok) {
+      return { contacts: [...fallbackContacts], source: 'fallback' }
+    }
+
+    const rows = await response.json()
+
+    if (!Array.isArray(rows)) {
+      return { contacts: [...fallbackContacts], source: 'fallback' }
+    }
+
+    return {
+      contacts: rows.map((row) => normalizeContactRow(row as Record<string, unknown>)),
+      source: 'static-json',
+    }
+  } catch {
+    return { contacts: [...fallbackContacts], source: 'fallback' }
+  }
+}
 export function serializeSavedListFilters(filters: Partial<Record<FilterKey, readonly unknown[]>>): string {
   return JSON.stringify(normalizeFilters(filters))
 }

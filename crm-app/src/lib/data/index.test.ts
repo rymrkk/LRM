@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { EMPTY_FILTERS, REQUIRED_CONTACT_HEADERS } from '../constants'
 import type { ContactRecord } from '../../types/contact'
 import {
+  buildContactsWorkspace,
   countCsvDataRows,
   deserializeSavedListFilters,
   deriveBestPhone,
   extractFilterOptions,
   filterContacts,
   groupContactsByCompany,
+  loadContactsJson,
   normalizeContactRow,
   parseContactsCsv,
   serializeSavedListFilters,
@@ -205,5 +207,60 @@ describe('CSV contact data utilities', () => {
       seniority: ['Manager'],
     })
     expect(deserializeSavedListFilters('not-json')).toEqual(EMPTY_FILTERS)
+  })
+
+  it('builds a workspace data view from contacts, search, and filters', () => {
+    const workspace = buildContactsWorkspace(sampleContacts, {
+      searchQuery: 'analytical',
+      filters: { country: ['Singapore'] },
+    })
+
+    expect(workspace.totalCount).toBe(3)
+    expect(workspace.filteredCount).toBe(1)
+    expect(workspace.contacts.map((contact) => contact.id)).toEqual(['3'])
+    expect(workspace.filterOptions.country).toEqual(['Singapore', 'United Kingdom', 'United States'])
+    expect(workspace.companies).toEqual([
+      {
+        company_name: 'Analytical Engines',
+        contact_count: 1,
+        countries: ['Singapore'],
+        employee_range: '1001-5000',
+        contacts: [sampleContacts[2]],
+      },
+    ])
+  })
+
+  it('loads normalized contacts from static JSON and falls back when the file is unavailable', async () => {
+    const okFetch = async () =>
+      ({
+        ok: true,
+        json: async () => [
+          {
+            id: 10,
+            name: '  Mae Jemison  ',
+            email: 'mae@example.com',
+            company_name: 'Orbit Labs',
+          },
+        ],
+      }) as Response
+
+    await expect(loadContactsJson(okFetch, '/data/contacts.json', sampleContacts)).resolves.toEqual({
+      contacts: [
+        expect.objectContaining({
+          id: '10',
+          name: 'Mae Jemison',
+          email: 'mae@example.com',
+          company_name: 'Orbit Labs',
+        }),
+      ],
+      source: 'static-json',
+    })
+
+    const missingFetch = async () => ({ ok: false, status: 404 }) as Response
+
+    await expect(loadContactsJson(missingFetch, '/data/contacts.json', sampleContacts)).resolves.toEqual({
+      contacts: sampleContacts,
+      source: 'fallback',
+    })
   })
 })
