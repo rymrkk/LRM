@@ -82,12 +82,12 @@ function normalizeSearchText(value: unknown): string {
 }
 
 const REGION_DISPLAY_VALUE_OVERRIDES = new Map<string, string>([
-  ['?l?skie', 'Śląskie'],
-  ['województwo ?ódzkie', 'Łódź Voivodeship'],
-  ['√éle-de-France', 'Île-de-France'],
-  ['≈Å√≥d≈∫ Voivodeship', 'Łódź Voivodeship'],
-  ['Â Luzon', 'Luzon'],
-  ['Ã‚Â Luzon', 'Luzon'],
+  ['?l?skie', '\u015Al\u0105skie'],
+  ['wojew\u00F3dztwo ?\u00F3dzkie', '\u0141\u00F3d\u017A Voivodeship'],
+  ['\u221A\u00E9le-de-France', '\u00CEle-de-France'],
+  ['\u2248\u00C5\u221A\u2265d\u2248\u222B Voivodeship', '\u0141\u00F3d\u017A Voivodeship'],
+  ['\u00C2\u00A0Luzon', 'Luzon'],
+  ['\u00C3\u201A\u00C2\u00A0Luzon', 'Luzon'],
 ])
 
 function normalizeRegionDisplayValue(value: unknown): string {

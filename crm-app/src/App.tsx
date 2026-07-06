@@ -23,7 +23,7 @@ import {
   INITIAL_EXPECTED_ROW_COUNT,
   OPTIONAL_COLUMNS,
 } from './lib/constants'
-import { buildContactsWorkspace, deriveBestPhone, loadContactsJson } from './lib/data'
+import { buildContactsWorkspace, deriveBestPhone, extractFilterOptions, loadContactsJson } from './lib/data'
 import type { CompanySummary, ContactColumnKey, ContactRecord } from './types/contact'
 import type { FilterKey, SavedList } from './types/workspace'
 
@@ -249,6 +249,10 @@ function App() {
     })
   }
 
+  function clearFilters() {
+    setFilters({})
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
@@ -350,6 +354,7 @@ function App() {
             filterOptions={workspace.filterOptions}
             filters={filters}
             filteredCount={workspace.filteredCount}
+            onClearFilters={clearFilters}
             onOpenContact={setSelectedContact}
             onToggleFilter={toggleFilter}
             totalCount={workspace.totalCount}
@@ -369,6 +374,7 @@ type ContactsPageProps = {
   filterOptions: Record<FilterKey, string[]>
   filters: Partial<Record<FilterKey, string[]>>
   filteredCount: number
+  onClearFilters: () => void
   onOpenContact: (contact: ContactRecord) => void
   onToggleFilter: (filter: FilterKey, value: string) => void
   totalCount: number
@@ -379,11 +385,24 @@ function ContactsPage({
   filterOptions,
   filters,
   filteredCount,
+  onClearFilters,
   onOpenContact,
   onToggleFilter,
   totalCount,
 }: ContactsPageProps) {
   const tableRef = useRef<HTMLDivElement>(null)
+  const [filterSearchQuery, setFilterSearchQuery] = useState('')
+  const [expandedFilters, setExpandedFilters] = useState<FilterKey[]>([])
+  const activeFilterOptions = useMemo(() => {
+    const nextOptions = { ...filterOptions }
+
+    if ((filters.country ?? []).length > 0) {
+      nextOptions.state = extractFilterOptions(contacts).state
+    }
+
+    return nextOptions
+  }, [contacts, filterOptions, filters.country])
+  const hasActiveFilters = FILTER_KEYS.some((filter) => (filters[filter] ?? []).length > 0)
   const allColumns = useMemo(() => [...DEFAULT_VISIBLE_COLUMNS, ...OPTIONAL_COLUMNS], [])
   const [visibleColumns, setVisibleColumns] = useState<ContactColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
   const [draftVisibleColumns, setDraftVisibleColumns] = useState<ContactColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
@@ -421,6 +440,27 @@ function ContactsPage({
     setVisibleColumns(DEFAULT_VISIBLE_COLUMNS)
   }
 
+  function getFilterOptions(filter: FilterKey) {
+    const sourceOptions = activeFilterOptions[filter].length > 0 ? activeFilterOptions[filter] : FALLBACK_FILTER_OPTIONS[filter]
+    const matchingOptions = sourceOptions.filter((option) =>
+      option.toLocaleLowerCase().includes(filterSearchQuery.trim().toLocaleLowerCase()),
+    )
+
+    if (expandedFilters.includes(filter) || filterSearchQuery.trim()) {
+      return matchingOptions
+    }
+
+    return matchingOptions.slice(0, 5)
+  }
+
+  function toggleExpandedFilter(filter: FilterKey) {
+    setExpandedFilters((currentFilters) =>
+      currentFilters.includes(filter)
+        ? currentFilters.filter((currentFilter) => currentFilter !== filter)
+        : [...currentFilters, filter],
+    )
+  }
+
   return (
     <section className="workbench" id="contacts" aria-label="All contacts workspace">
       <section className="filter-panel" aria-label="Filters">
@@ -429,14 +469,23 @@ function ContactsPage({
           <h2>Filters</h2>
         </div>
         <p className="panel-copy">OR inside each group, AND across groups.</p>
+        <label className="field-stack filter-search-control">
+          <span>Search filter values</span>
+          <input
+            value={filterSearchQuery}
+            onChange={(event) => setFilterSearchQuery(event.target.value)}
+            placeholder="Find filter value"
+          />
+        </label>
+        <button className="secondary-action clear-filters-button" type="button" onClick={onClearFilters} disabled={!hasActiveFilters}>
+          Clear filters
+        </button>
         <div className="filter-stack">
           {FILTER_KEYS.map((filter) => (
             <div className="filter-group" key={filter}>
               <p className="filter-label">{labelForColumn(filter)}</p>
               <div className="filter-list">
-                {(filterOptions[filter].length > 0 ? filterOptions[filter] : FALLBACK_FILTER_OPTIONS[filter])
-                  .slice(0, 5)
-                  .map((option) => {
+                {getFilterOptions(filter).map((option) => {
                     const isActive = filters[filter]?.includes(option) ?? false
 
                     return (
@@ -452,6 +501,11 @@ function ContactsPage({
                     )
                   })}
               </div>
+              {!filterSearchQuery.trim() && activeFilterOptions[filter].length > 5 && (
+                <button className="filter-more-button" type="button" onClick={() => toggleExpandedFilter(filter)}>
+                  {expandedFilters.includes(filter) ? `Show fewer ${labelForColumn(filter)}` : `Show all ${labelForColumn(filter)}`}
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -633,6 +633,37 @@ a {
   line-height: 1.45;
 }
 
+
+.filter-search-control {
+  margin-bottom: 10px;
+}
+
+.clear-filters-button,
+.filter-more-button {
+  width: 100%;
+}
+
+.clear-filters-button {
+  margin-bottom: 14px;
+}
+
+.filter-more-button {
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+}
+
+.filter-more-button:hover,
+.filter-more-button:focus-visible {
+  color: var(--primary-hover);
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .filter-stack,
 .column-list,
 .link-list,

@@ -178,21 +178,20 @@ describe('CSV contact data utilities', () => {
       { ...sampleContacts[0], id: 'artifact-2', state: '#NAME?' },
       { ...sampleContacts[0], id: 'artifact-3', state: '2450' },
       { ...sampleContacts[0], id: 'artifact-4', state: '88 Queensway' },
-      { ...sampleContacts[0], id: 'artifact-5', state: 'âˆšÃ©le-de-France' },
+      { ...sampleContacts[0], id: 'artifact-5', state: '\u221A\u00E9le-de-France' },
       { ...sampleContacts[0], id: 'artifact-6', state: '?l?skie' },
-      { ...sampleContacts[0], id: 'artifact-7', state: 'â‰ˆÃ…âˆšâ‰¥dâ‰ˆâˆ« Voivodeship' },
+      { ...sampleContacts[0], id: 'artifact-7', state: '\u2248\u00C5\u221A\u2265d\u2248\u222B Voivodeship' },
       { ...sampleContacts[0], id: 'valid-1', state: 'Virginia' },
     ]
 
     expect(extractFilterOptions(contacts).state).toEqual([
-      'ÃŽle-de-France',
-      'ÅÃ³dÅº Voivodeship',
-      'ÅšlÄ…skie',
+      '\u00CEle-de-France',
+      '\u0141\u00F3d\u017A Voivodeship',
+      '\u015Al\u0105skie',
       'Virginia',
     ])
-    expect(contacts[4].state).toBe('âˆšÃ©le-de-France')
+    expect(contacts[4].state).toBe('\u221A\u00E9le-de-France')
   })
-
   it('groups contacts by company name with country summaries', () => {
     expect(groupContactsByCompany(sampleContacts)).toEqual([
       {
