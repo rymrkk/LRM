@@ -205,6 +205,36 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: '\u00CEle-de-France' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'TX' })).not.toBeInTheDocument()
   })
+
+  it('saves the current filter combination as a reusable local list', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await user.type(screen.getByRole('textbox', { name: /search contacts/i }), 'northstar')
+    await user.click(screen.getByRole('button', { name: 'Executive' }))
+    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /save as list/i }))
+    await user.type(screen.getByRole('textbox', { name: /list name/i }), 'Northstar executives')
+    await user.click(screen.getByRole('button', { name: /^save list$/i }))
+
+    await user.click(screen.getByRole('button', { name: /clear filters/i }))
+    await user.clear(screen.getByRole('textbox', { name: /search contacts/i }))
+    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('link', { name: /saved lists/i }))
+
+    expect(screen.getByRole('heading', { name: /northstar executives/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem('lrm:workspace-10124:saved-lists')).toContain('Northstar executives')
+
+    await user.click(screen.getByRole('button', { name: /open northstar executives/i }))
+
+    expect(screen.getByRole('link', { name: /all contacts/i })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('textbox', { name: /search contacts/i })).toHaveValue('northstar')
+    expect(screen.getByRole('button', { name: 'Executive' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+  })
   it('applies column picker changes only after clicking Apply columns', async () => {
     const user = userEvent.setup()
 

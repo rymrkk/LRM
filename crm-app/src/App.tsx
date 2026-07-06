@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import {
   Building2,
   Columns3,
@@ -23,7 +23,13 @@ import {
   INITIAL_EXPECTED_ROW_COUNT,
   OPTIONAL_COLUMNS,
 } from './lib/constants'
-import { buildContactsWorkspace, deriveBestPhone, extractFilterOptions, loadContactsJson } from './lib/data'
+import {
+  buildContactsWorkspace,
+  deriveBestPhone,
+  deserializeSavedListFilters,
+  extractFilterOptions,
+  loadContactsJson,
+} from './lib/data'
 import type { CompanySummary, ContactColumnKey, ContactRecord } from './types/contact'
 import type { FilterKey, SavedList } from './types/workspace'
 
@@ -135,6 +141,10 @@ const SAMPLE_CONTACTS: ContactRecord[] = [
   },
 ]
 
+const WORKSPACE_ID = 'workspace-10124'
+const USER_ID = 'single-user'
+const SAVED_LISTS_STORAGE_KEY = 'lrm:workspace-10124:saved-lists'
+
 const SAVED_LISTS: SavedList[] = [
   {
     id: 'list-001',
@@ -158,6 +168,88 @@ const SAVED_LISTS: SavedList[] = [
   },
 ]
 
+
+function createClientId(prefix: string) {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`
+  }
+
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function normalizeStoredSavedList(row: unknown): SavedList | null {
+  if (!row || typeof row !== 'object') {
+    return null
+  }
+
+  const candidate = row as Partial<SavedList>
+  const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+
+  if (!name) {
+    return null
+  }
+
+  const now = new Date().toISOString()
+
+  return {
+    id: typeof candidate.id === 'string' && candidate.id ? candidate.id : createClientId('list'),
+    workspace_id: WORKSPACE_ID,
+    user_id: USER_ID,
+    name,
+    filters_json: deserializeSavedListFilters(candidate.filters_json),
+    search_query: typeof candidate.search_query === 'string' ? candidate.search_query : '',
+    created_at: typeof candidate.created_at === 'string' ? candidate.created_at : now,
+    updated_at: typeof candidate.updated_at === 'string' ? candidate.updated_at : now,
+  }
+}
+
+function readSavedListsFromStorage() {
+  if (typeof window === 'undefined') {
+    return SAVED_LISTS
+  }
+
+  const rawValue = window.localStorage.getItem(SAVED_LISTS_STORAGE_KEY)
+
+  if (!rawValue) {
+    return SAVED_LISTS
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown
+
+    if (!Array.isArray(parsed)) {
+      return SAVED_LISTS
+    }
+
+    const savedLists = parsed.map(normalizeStoredSavedList).filter((list): list is SavedList => list !== null)
+    return savedLists.length > 0 ? savedLists : SAVED_LISTS
+  } catch {
+    return SAVED_LISTS
+  }
+}
+
+function persistSavedLists(savedLists: readonly SavedList[]) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(SAVED_LISTS_STORAGE_KEY, JSON.stringify(savedLists))
+}
+
+function createSavedList(name: string, filters: Partial<Record<FilterKey, string[]>>, searchQuery: string): SavedList {
+  const now = new Date().toISOString()
+
+  return {
+    id: createClientId('list'),
+    workspace_id: WORKSPACE_ID,
+    user_id: USER_ID,
+    name,
+    filters_json: deserializeSavedListFilters(filters),
+    search_query: searchQuery.trim(),
+    created_at: now,
+    updated_at: now,
+  }
+}
 const COLUMN_LABELS: Partial<Record<ContactColumnKey, string>> = {
   name: 'Name',
   job_title: 'Job title',
@@ -218,6 +310,7 @@ function App() {
   const [contacts, setContacts] = useState<ContactRecord[]>(SAMPLE_CONTACTS)
   const [filters, setFilters] = useState<Partial<Record<FilterKey, string[]>>>({})
   const [searchQuery, setSearchQuery] = useState('')
+  const [savedLists, setSavedLists] = useState<SavedList[]>(readSavedListsFromStorage)
 
   useEffect(() => {
     if (typeof fetch !== 'function') return
@@ -251,6 +344,22 @@ function App() {
 
   function clearFilters() {
     setFilters({})
+  }
+
+  function saveCurrentList(name: string) {
+    const savedList = createSavedList(name, filters, searchQuery)
+
+    setSavedLists((currentLists) => {
+      const nextLists = [savedList, ...currentLists]
+      persistSavedLists(nextLists)
+      return nextLists
+    })
+  }
+
+  function openSavedList(savedList: SavedList) {
+    setFilters(savedList.filters_json)
+    setSearchQuery(savedList.search_query)
+    setActiveView('contacts')
   }
 
   return (
@@ -356,12 +465,13 @@ function App() {
             filteredCount={workspace.filteredCount}
             onClearFilters={clearFilters}
             onOpenContact={setSelectedContact}
+            onSaveList={saveCurrentList}
             onToggleFilter={toggleFilter}
             totalCount={workspace.totalCount}
           />
         )}
         {activeView === 'companies' && <CompaniesPage companies={workspace.companies} />}
-        {activeView === 'saved-lists' && <SavedListsPage savedLists={SAVED_LISTS} />}
+        {activeView === 'saved-lists' && <SavedListsPage onOpenSavedList={openSavedList} savedLists={savedLists} />}
       </section>
 
       {selectedContact && <ContactDetailDrawer contact={selectedContact} onClose={() => setSelectedContact(null)} />}
@@ -376,6 +486,7 @@ type ContactsPageProps = {
   filteredCount: number
   onClearFilters: () => void
   onOpenContact: (contact: ContactRecord) => void
+  onSaveList: (name: string) => void
   onToggleFilter: (filter: FilterKey, value: string) => void
   totalCount: number
 }
@@ -387,12 +498,15 @@ function ContactsPage({
   filteredCount,
   onClearFilters,
   onOpenContact,
+  onSaveList,
   onToggleFilter,
   totalCount,
 }: ContactsPageProps) {
   const tableRef = useRef<HTMLDivElement>(null)
   const [filterSearchQuery, setFilterSearchQuery] = useState('')
   const [expandedFilters, setExpandedFilters] = useState<FilterKey[]>([])
+  const [isSaveListFormOpen, setIsSaveListFormOpen] = useState(false)
+  const [saveListName, setSaveListName] = useState('')
   const activeFilterOptions = useMemo(() => {
     const nextOptions = { ...filterOptions }
 
@@ -461,6 +575,19 @@ function ContactsPage({
     )
   }
 
+  function submitSavedList(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmedName = saveListName.trim()
+
+    if (!trimmedName) {
+      return
+    }
+
+    onSaveList(trimmedName)
+    setSaveListName('')
+    setIsSaveListFormOpen(false)
+  }
+
   return (
     <section className="workbench" id="contacts" aria-label="All contacts workspace">
       <section className="filter-panel" aria-label="Filters">
@@ -509,10 +636,31 @@ function ContactsPage({
             </div>
           ))}
         </div>
-        <button className="save-list-button" type="button">
+        <button className="save-list-button" type="button" onClick={() => setIsSaveListFormOpen(true)}>
           <ListChecks size={16} aria-hidden="true" />
           Save as list
         </button>
+        {isSaveListFormOpen && (
+          <form className="save-list-form" onSubmit={submitSavedList}>
+            <label className="field-stack">
+              <span>List name</span>
+              <input
+                value={saveListName}
+                onChange={(event) => setSaveListName(event.target.value)}
+                placeholder="Name this segment"
+              />
+            </label>
+            <p>{filteredCount.toLocaleString()} contacts will be saved with the current search and filters.</p>
+            <div className="form-actions">
+              <button className="primary-action" type="submit" disabled={!saveListName.trim()}>
+                Save list
+              </button>
+              <button className="secondary-action" type="button" onClick={() => setIsSaveListFormOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
       </section>
 
       <section className="table-surface">
@@ -648,10 +796,11 @@ function CompaniesPage({ companies }: CompaniesPageProps) {
 }
 
 type SavedListsPageProps = {
+  onOpenSavedList: (savedList: SavedList) => void
   savedLists: SavedList[]
 }
 
-function SavedListsPage({ savedLists }: SavedListsPageProps) {
+function SavedListsPage({ onOpenSavedList, savedLists }: SavedListsPageProps) {
   return (
     <section className="view-shell" id="saved-lists" aria-labelledby="saved-lists-title">
       <div className="table-header view-header">
@@ -671,7 +820,7 @@ function SavedListsPage({ savedLists }: SavedListsPageProps) {
                 <h3>{list.name}</h3>
                 <p>{activeFilterCount} filter groups, search query "{list.search_query}"</p>
               </div>
-              <button className="secondary-action" type="button">
+              <button className="secondary-action" type="button" onClick={() => onOpenSavedList(list)}>
                 Open {list.name}
               </button>
             </article>
