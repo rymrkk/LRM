@@ -455,6 +455,55 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.phone-cell-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mock-row span.phone-number-text,
+.mock-row span.copy-feedback {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border-bottom: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-number-text {
+  flex: 1 1 auto;
+  user-select: text;
+}
+
+.copy-phone-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--primary);
+  background: oklch(1 0 0);
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.copy-phone-button:hover,
+.copy-phone-button:focus-visible {
+  color: oklch(1 0 0);
+  border-color: var(--primary);
+  background: var(--primary);
+  outline: none;
+}
+
+.copy-feedback {
+  flex: 0 0 auto;
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 750;
+}
 
 .mock-head {
   background: var(--surface-strong);

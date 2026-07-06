@@ -35,6 +35,26 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: /upload csv/i })).toHaveClass('primary-action')
   })
 
+  it('copies a best phone value from the contacts table', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+
+    vi.stubGlobal('navigator', {
+      ...window.navigator,
+      clipboard: { writeText },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(screen.getByText('+1 555 0100')).toHaveClass('phone-number-text')
+
+    await user.click(screen.getByRole('button', { name: /copy phone number \+1 555 0100/i }))
+
+    expect(writeText).toHaveBeenCalledWith('+1 555 0100')
+    expect(await screen.findByText('Copied!')).toBeInTheDocument()
+  })
+
   it('switches between companies and saved lists shells', async () => {
     const user = userEvent.setup()
 

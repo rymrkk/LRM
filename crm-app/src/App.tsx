@@ -1,7 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import {
   Building2,
+  Check,
   Columns3,
+  Copy,
   Filter,
   ListChecks,
   Mail,
@@ -1147,6 +1149,8 @@ type ContactTableRowProps = {
   visibleColumns: ContactColumnKey[]
 }
 
+const COPY_FEEDBACK_MS = 1600
+
 const ContactTableRow = memo(function ContactTableRow({
   contact,
   gridTemplateColumns,
@@ -1155,24 +1159,74 @@ const ContactTableRow = memo(function ContactTableRow({
   virtualized = false,
   visibleColumns,
 }: ContactTableRowProps) {
+  const [copiedPhone, setCopiedPhone] = useState('')
+  const copyFeedbackTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimer.current) {
+        window.clearTimeout(copyFeedbackTimer.current)
+      }
+    }
+  }, [])
+
+  async function copyPhoneNumber(phoneNumber: string) {
+    if (!phoneNumber || !navigator.clipboard?.writeText) return
+
+    await navigator.clipboard.writeText(phoneNumber)
+    setCopiedPhone(phoneNumber)
+
+    if (copyFeedbackTimer.current) {
+      window.clearTimeout(copyFeedbackTimer.current)
+    }
+
+    copyFeedbackTimer.current = window.setTimeout(() => {
+      setCopiedPhone('')
+      copyFeedbackTimer.current = null
+    }, COPY_FEEDBACK_MS)
+  }
+
   return (
     <div
       className={`mock-row ${virtualized ? 'virtual-row' : ''}`}
       role="row"
       style={{ ...style, gridTemplateColumns }}
     >
-      {visibleColumns.map((column) => (
-        <span role="cell" key={column}>
-          {column === 'name' ? (
-            <button className="contact-row-button" type="button" onClick={() => onOpenContact(contact)}>
-              <span>{contact.name}</span>
-              <span className="sr-only">Open {contact.name}</span>
-            </button>
-          ) : (
-            getColumnValue(contact, column)
-          )}
-        </span>
-      ))}
+      {visibleColumns.map((column) => {
+        const phoneNumber = column === 'best_phone' ? deriveBestPhone(contact) : ''
+
+        return (
+          <span className={column === 'best_phone' ? 'phone-cell-wrapper' : undefined} role="cell" key={column}>
+            {column === 'name' ? (
+              <button className="contact-row-button" type="button" onClick={() => onOpenContact(contact)}>
+                <span>{contact.name}</span>
+                <span className="sr-only">Open {contact.name}</span>
+              </button>
+            ) : column === 'best_phone' && phoneNumber ? (
+              <>
+                <span className="phone-number-text">{phoneNumber}</span>
+                <button
+                  className="copy-phone-button"
+                  type="button"
+                  onClick={() => void copyPhoneNumber(phoneNumber)}
+                  aria-label={`Copy phone number ${phoneNumber}`}
+                >
+                  {copiedPhone === phoneNumber ? (
+                    <Check size={14} aria-hidden="true" />
+                  ) : (
+                    <Copy size={14} aria-hidden="true" />
+                  )}
+                </button>
+                {copiedPhone === phoneNumber && (
+                  <span className="copy-feedback" role="status">Copied!</span>
+                )}
+              </>
+            ) : (
+              getColumnValue(contact, column)
+            )}
+          </span>
+        )
+      })}
     </div>
   )
 })
