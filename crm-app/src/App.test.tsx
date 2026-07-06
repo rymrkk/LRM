@@ -8,7 +8,7 @@ describe('App shell', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the CRM workspace navigation and contact workbench shell', () => {
+  it('renders the CRM workspace navigation and contact workbench shell', async () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: /lead relationship manager/i })).toBeInTheDocument()
@@ -22,7 +22,7 @@ describe('App shell', () => {
     expect(screen.getByRole('region', { name: /filters/i })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: /column picker/i })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /all contacts/i })).toBeInTheDocument()
-    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
     expect(screen.getAllByText('State / Province').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /save as list/i })).toBeInTheDocument()
   })
@@ -59,14 +59,14 @@ describe('App shell', () => {
     await user.upload(screen.getByLabelText(/csv file/i), file)
 
     expect(screen.getByRole('combobox', { name: /workspace/i })).toHaveDisplayValue('enterprise-leads.csv')
-    expect(screen.getByText(/1 of 1 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 1 shown/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /open avery chen/i })).toBeInTheDocument()
     expect(window.localStorage.getItem('lrm:workspace-10124:local-workspaces')).toContain('enterprise-leads.csv')
 
     await user.click(screen.getByRole('button', { name: /delete workspace/i }))
 
     expect(screen.getByRole('combobox', { name: /workspace/i })).toHaveDisplayValue('10124 Users')
-    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
     expect(window.localStorage.getItem('lrm:workspace-10124:local-workspaces')).not.toContain('enterprise-leads.csv')
   })
   it('virtualizes static JSON contacts instead of mounting every row', async () => {
@@ -100,15 +100,15 @@ describe('App shell', () => {
 
     await user.type(screen.getByRole('textbox', { name: /search contacts/i }), 'signal')
 
-    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /open priya nair/i })).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /open priya nair/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /open maria santos/i })).not.toBeInTheDocument()
 
     await user.clear(screen.getByRole('textbox', { name: /search contacts/i }))
     await user.click(screen.getByRole('button', { name: 'Executive' }))
 
-    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /open maria santos/i })).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /open maria santos/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /open jordan lee/i })).not.toBeInTheDocument()
   })
 
@@ -123,11 +123,11 @@ describe('App shell', () => {
     expect(screen.queryByRole('button', { name: 'Director' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Executive' }))
-    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /clear filters/i }))
 
-    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Executive' })).toHaveAttribute('aria-pressed', 'false')
   })
 
@@ -207,7 +207,7 @@ describe('App shell', () => {
 
     await user.type(country, 'United States')
 
-    expect(screen.getByText(/2 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/2 of 4 shown/i)).toBeInTheDocument()
     expect(state).toBeEnabled()
     expect(city).toBeDisabled()
 
@@ -215,8 +215,8 @@ describe('App shell', () => {
     expect(city).toBeEnabled()
 
     await user.type(city, 'Austin')
-    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /open us austin contact/i })).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /open us austin contact/i })).toBeInTheDocument()
 
     await user.clear(country)
     await user.type(country, 'France')
@@ -224,7 +224,7 @@ describe('App shell', () => {
     expect(state).toHaveValue('')
     expect(city).toHaveValue('')
     expect(city).toBeDisabled()
-    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
 
     await user.type(state, '\u00CEle-de-France')
     await user.type(city, 'Nowhere')
@@ -239,7 +239,7 @@ describe('App shell', () => {
 
     await user.type(screen.getByRole('textbox', { name: /search contacts/i }), 'northstar')
     await user.click(screen.getByRole('button', { name: 'Executive' }))
-    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /save as list/i }))
     await user.type(screen.getByRole('textbox', { name: /list name/i }), 'Northstar executives')
@@ -247,19 +247,22 @@ describe('App shell', () => {
 
     await user.click(screen.getByRole('button', { name: /clear filters/i }))
     await user.clear(screen.getByRole('textbox', { name: /search contacts/i }))
-    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('link', { name: /saved lists/i }))
 
     expect(screen.getByRole('heading', { name: /northstar executives/i })).toBeInTheDocument()
-    expect(window.localStorage.getItem('lrm:workspace-10124:saved-lists')).toContain('Northstar executives')
+    expect(window.localStorage.getItem('lrm:workspace-10124:saved-lists') ?? '').not.toContain('Northstar executives')
+    await waitFor(() => {
+      expect(window.localStorage.getItem('lrm:workspace-10124:saved-lists')).toContain('Northstar executives')
+    })
 
     await user.click(screen.getByRole('button', { name: /open northstar executives/i }))
 
     expect(screen.getByRole('link', { name: /all contacts/i })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('textbox', { name: /search contacts/i })).toHaveValue('northstar')
     expect(screen.getByRole('button', { name: 'Executive' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
   })
   it('applies column picker changes only after clicking Apply columns', async () => {
     const user = userEvent.setup()
@@ -296,7 +299,10 @@ describe('App shell', () => {
     await user.clear(tags)
     await user.type(tags, 'priority, demo')
 
-    expect(window.localStorage.getItem('lrm:workspace-10124:contact-annotations')).toContain('Call after the product demo.')
+    expect(window.localStorage.getItem('lrm:workspace-10124:contact-annotations') ?? '').not.toContain('Call after the product demo.')
+    await waitFor(() => {
+      expect(window.localStorage.getItem('lrm:workspace-10124:contact-annotations')).toContain('Call after the product demo.')
+    })
 
     await user.click(screen.getByRole('button', { name: /close contact detail/i }))
     await user.click(screen.getByRole('button', { name: /open maria santos/i }))

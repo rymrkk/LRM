@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import {
   Building2,
   Columns3,
@@ -25,14 +25,13 @@ import {
   OPTIONAL_COLUMNS,
 } from './lib/constants'
 import {
-  buildContactsWorkspace,
-  buildLocationFilterIndex,
   deriveBestPhone,
   deserializeSavedListFilters,
   loadContactsJson,
   parseContactsCsv,
 } from './lib/data'
 import type { CompanySummary, ContactColumnKey, ContactRecord } from './types/contact'
+import { useContactWorkspace } from './hooks/useContactWorkspace'
 import type { FilterKey, SavedList } from './types/workspace'
 
 type ViewKey = 'contacts' | 'companies' | 'saved-lists'
@@ -149,6 +148,10 @@ const USER_ID = 'single-user'
 const SAVED_LISTS_STORAGE_KEY = 'lrm:workspace-10124:saved-lists'
 const CONTACT_ANNOTATIONS_STORAGE_KEY = 'lrm:workspace-10124:contact-annotations'
 const LOCAL_WORKSPACES_STORAGE_KEY = 'lrm:workspace-10124:local-workspaces'
+const STORAGE_WRITE_DEBOUNCE_MS = 500
+
+let contactAnnotationsPersistTimer: number | undefined
+let savedListsPersistTimer: number | undefined
 
 const SAVED_LISTS: SavedList[] = [
   {
@@ -292,7 +295,14 @@ function persistContactAnnotations(annotations: ContactAnnotations) {
     return
   }
 
-  window.localStorage.setItem(CONTACT_ANNOTATIONS_STORAGE_KEY, JSON.stringify(annotations))
+  if (contactAnnotationsPersistTimer) {
+    window.clearTimeout(contactAnnotationsPersistTimer)
+  }
+
+  contactAnnotationsPersistTimer = window.setTimeout(() => {
+    window.localStorage.setItem(CONTACT_ANNOTATIONS_STORAGE_KEY, JSON.stringify(annotations))
+    contactAnnotationsPersistTimer = undefined
+  }, STORAGE_WRITE_DEBOUNCE_MS)
 }
 function createClientId(prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -358,7 +368,14 @@ function persistSavedLists(savedLists: readonly SavedList[]) {
     return
   }
 
-  window.localStorage.setItem(SAVED_LISTS_STORAGE_KEY, JSON.stringify(savedLists))
+  if (savedListsPersistTimer) {
+    window.clearTimeout(savedListsPersistTimer)
+  }
+
+  savedListsPersistTimer = window.setTimeout(() => {
+    window.localStorage.setItem(SAVED_LISTS_STORAGE_KEY, JSON.stringify(savedLists))
+    savedListsPersistTimer = undefined
+  }, STORAGE_WRITE_DEBOUNCE_MS)
 }
 
 function createSavedList(name: string, filters: Partial<Record<FilterKey, string[]>>, searchQuery: string): SavedList {
@@ -460,10 +477,13 @@ function App() {
     }
   }, [activeWorkspaceId])
 
-  const workspace = useMemo(
-    () => buildContactsWorkspace(contacts, { filters, searchQuery }),
-    [contacts, filters, searchQuery],
-  )
+  const workspace = useContactWorkspace({
+    activeView,
+    contacts,
+    filters,
+    searchQuery,
+    workspaceId: activeWorkspaceId,
+  })
   const activeLocalWorkspace = localWorkspaces.find((localWorkspace) => localWorkspace.id === activeWorkspaceId)
   const activeWorkspaceName = activeLocalWorkspace?.name ?? '10124 Users'
   const activeWorkspaceRowCount = activeLocalWorkspace?.rowCount ?? INITIAL_EXPECTED_ROW_COUNT
@@ -699,11 +719,12 @@ function App() {
 
         {activeView === 'contacts' && (
           <ContactsPage
-            allContacts={contacts}
-            contacts={workspace.contacts}
+            contacts={workspace.filteredContacts}
             filterOptions={workspace.filterOptions}
             filters={filters}
             filteredCount={workspace.filteredCount}
+            isFiltering={workspace.isFiltering}
+            locationIndex={workspace.locationIndex}
             onClearFilters={clearFilters}
             onOpenContact={setSelectedContact}
             onSaveList={saveCurrentList}
@@ -856,11 +877,12 @@ function SearchableCombobox({
   )
 }
 type ContactsPageProps = {
-  allContacts: ContactRecord[]
   contacts: ContactRecord[]
   filterOptions: Record<FilterKey, string[]>
   filters: Partial<Record<FilterKey, string[]>>
   filteredCount: number
+  isFiltering: boolean
+  locationIndex: ReturnType<typeof useContactWorkspace>['locationIndex']
   onClearFilters: () => void
   onOpenContact: (contact: ContactRecord) => void
   onSaveList: (name: string) => void
@@ -870,11 +892,12 @@ type ContactsPageProps = {
 }
 
 function ContactsPage({
-  allContacts,
   contacts,
   filterOptions,
   filters,
   filteredCount,
+  isFiltering,
+  locationIndex,
   onClearFilters,
   onOpenContact,
   onSaveList,
@@ -887,7 +910,6 @@ function ContactsPage({
   const [expandedFilters, setExpandedFilters] = useState<FilterKey[]>([])
   const [isSaveListFormOpen, setIsSaveListFormOpen] = useState(false)
   const [saveListName, setSaveListName] = useState('')
-  const locationIndex = useMemo(() => buildLocationFilterIndex(allContacts), [allContacts])
   const countryValue = filters.country?.[0] ?? ''
   const stateValue = filters.state?.[0] ?? ''
   const cityValue = filters.city?.[0] ?? ''
@@ -1061,7 +1083,7 @@ function ContactsPage({
             <p className="eyebrow">All Contacts</p>
             <h2>{filteredCount.toLocaleString()} of {totalCount.toLocaleString()} shown</h2>
           </div>
-          <p>Search and filters are applied in memory from the active workspace data source.</p>
+          <p>{isFiltering ? 'Updating results...' : 'Search and filters are applied from the active workspace data source.'}</p>
         </div>
         <div className="mock-table virtual-table" role="table" aria-label="All Contacts" ref={tableRef}>
           <div className="mock-row mock-head" role="row" style={{ gridTemplateColumns }}>
@@ -1124,7 +1146,7 @@ type ContactTableRowProps = {
   visibleColumns: ContactColumnKey[]
 }
 
-function ContactTableRow({
+const ContactTableRow = memo(function ContactTableRow({
   contact,
   gridTemplateColumns,
   onOpenContact,
@@ -1152,7 +1174,7 @@ function ContactTableRow({
       ))}
     </div>
   )
-}
+})
 type CompaniesPageProps = {
   companies: CompanySummary[]
 }
