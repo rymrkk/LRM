@@ -1217,9 +1217,6 @@ const ContactTableRow = memo(function ContactTableRow({
                     <Copy size={14} aria-hidden="true" />
                   )}
                 </button>
-                {copiedPhone === phoneNumber && (
-                  <span className="copy-feedback" role="status">Copied!</span>
-                )}
               </>
             ) : (
               getColumnValue(contact, column)

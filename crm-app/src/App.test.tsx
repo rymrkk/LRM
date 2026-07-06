@@ -52,7 +52,7 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', { name: /copy phone number \+1 555 0100/i }))
 
     expect(writeText).toHaveBeenCalledWith('+1 555 0100')
-    expect(await screen.findByText('Copied!')).toBeInTheDocument()
+    expect(screen.queryByText('Copied!')).not.toBeInTheDocument()
   })
 
   it('switches between companies and saved lists shells', async () => {

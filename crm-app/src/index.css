@@ -461,8 +461,7 @@ a {
   gap: 6px;
 }
 
-.mock-row span.phone-number-text,
-.mock-row span.copy-feedback {
+.mock-row span.phone-number-text {
   min-width: 0;
   overflow: hidden;
   padding: 0;
@@ -498,12 +497,6 @@ a {
   outline: none;
 }
 
-.copy-feedback {
-  flex: 0 0 auto;
-  color: var(--success);
-  font-size: 12px;
-  font-weight: 750;
-}
 
 .mock-head {
   background: var(--surface-strong);
