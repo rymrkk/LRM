@@ -772,13 +772,17 @@ a {
   margin-bottom: 10px;
 }
 
+.filter-action-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.apply-filters-button,
 .clear-filters-button,
 .filter-more-button {
   width: 100%;
-}
-
-.clear-filters-button {
-  margin-bottom: 14px;
 }
 
 .filter-more-button {

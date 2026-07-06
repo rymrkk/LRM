@@ -197,7 +197,14 @@ describe('App shell', () => {
     expect(screen.queryByRole('button', { name: /open maria santos/i })).not.toBeInTheDocument()
 
     await user.clear(screen.getByRole('textbox', { name: /search contacts/i }))
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: 'Executive' }))
+
+    expect(screen.getByRole('button', { name: 'Executive' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /apply filters/i }))
 
     expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /open maria santos/i })).toBeInTheDocument()
@@ -213,8 +220,13 @@ describe('App shell', () => {
 
     expect(screen.getByRole('button', { name: 'Executive' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Director' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/OR inside each group, AND across groups/i)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Executive' }))
+    expect(screen.getByRole('button', { name: 'Executive' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /apply filters/i }))
     expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /clear filters/i }))
@@ -299,7 +311,7 @@ describe('App shell', () => {
 
     await user.type(country, 'United States')
 
-    expect(await screen.findByText(/2 of 4 shown/i)).toBeInTheDocument()
+    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
     expect(state).toBeEnabled()
     expect(city).toBeDisabled()
 
@@ -307,6 +319,10 @@ describe('App shell', () => {
     expect(city).toBeEnabled()
 
     await user.type(city, 'Austin')
+    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /apply filters/i }))
+
     expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /open us austin contact/i })).toBeInTheDocument()
 
@@ -316,6 +332,10 @@ describe('App shell', () => {
     expect(state).toHaveValue('')
     expect(city).toHaveValue('')
     expect(city).toBeDisabled()
+    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /apply filters/i }))
+
     expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
 
     await user.type(state, '\u00CEle-de-France')
@@ -330,7 +350,11 @@ describe('App shell', () => {
     render(<App />)
 
     await user.type(screen.getByRole('textbox', { name: /search contacts/i }), 'northstar')
+    expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: 'Executive' }))
+    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /apply filters/i }))
     expect(await screen.findByText(/1 of 4 shown/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /save as list/i }))

@@ -452,6 +452,54 @@ function normalizeComparableValue(value: unknown) {
   return typeof value === 'string' ? value.trim().toLocaleLowerCase() : ''
 }
 
+function normalizeFilterValues(filters: Partial<Record<FilterKey, string[]>>, filter: FilterKey) {
+  return filters[filter] ?? []
+}
+
+function areFilterSetsEqual(
+  currentFilters: Partial<Record<FilterKey, string[]>>,
+  nextFilters: Partial<Record<FilterKey, string[]>>,
+) {
+  return FILTER_KEYS.every((filter) => {
+    const currentValues = normalizeFilterValues(currentFilters, filter)
+    const nextValues = normalizeFilterValues(nextFilters, filter)
+
+    return currentValues.length === nextValues.length && currentValues.every((value, index) => value === nextValues[index])
+  })
+}
+
+function toggleFilterValue(
+  currentFilters: Partial<Record<FilterKey, string[]>>,
+  filter: FilterKey,
+  value: string,
+) {
+  const currentValues = currentFilters[filter] ?? []
+  const nextValues = currentValues.includes(value)
+    ? currentValues.filter((currentValue) => currentValue !== value)
+    : [...currentValues, value]
+
+  return { ...currentFilters, [filter]: nextValues }
+}
+
+function setDraftLocationValue(
+  currentFilters: Partial<Record<FilterKey, string[]>>,
+  filter: Extract<FilterKey, 'country' | 'state' | 'city'>,
+  value: string,
+) {
+  const nextFilters = { ...currentFilters, [filter]: value ? [value] : [] }
+
+  if (filter === 'country') {
+    nextFilters.state = []
+    nextFilters.city = []
+  }
+
+  if (filter === 'state') {
+    nextFilters.city = []
+  }
+
+  return nextFilters
+}
+
 function formatEmployees(contact: ContactRecord) {
   const employees = formatCellValue(contact.employees)
   const employeeRange = formatCellValue(contact.employee_range)
@@ -583,32 +631,8 @@ function App() {
     resetWorkspaceView(defaultContacts)
   }
 
-  function toggleFilter(filter: FilterKey, value: string) {
-    setFilters((currentFilters) => {
-      const currentValues = currentFilters[filter] ?? []
-      const nextValues = currentValues.includes(value)
-        ? currentValues.filter((currentValue) => currentValue !== value)
-        : [...currentValues, value]
-
-      return { ...currentFilters, [filter]: nextValues }
-    })
-  }
-
-  function setLocationFilter(filter: Extract<FilterKey, 'country' | 'state' | 'city'>, value: string) {
-    setFilters((currentFilters) => {
-      const nextFilters = { ...currentFilters, [filter]: value ? [value] : [] }
-
-      if (filter === 'country') {
-        nextFilters.state = []
-        nextFilters.city = []
-      }
-
-      if (filter === 'state') {
-        nextFilters.city = []
-      }
-
-      return nextFilters
-    })
+  function applyFilters(nextFilters: Partial<Record<FilterKey, string[]>>) {
+    setFilters(nextFilters)
   }
 
   function clearFilters() {
@@ -770,8 +794,7 @@ function App() {
             onClearFilters={clearFilters}
             onOpenContact={setSelectedContact}
             onSaveList={saveCurrentList}
-            onSetLocationFilter={setLocationFilter}
-            onToggleFilter={toggleFilter}
+            onApplyFilters={applyFilters}
             totalCount={workspace.totalCount}
           />
         )}
@@ -930,8 +953,7 @@ type ContactsPageProps = {
   onClearFilters: () => void
   onOpenContact: (contact: ContactRecord) => void
   onSaveList: (name: string) => void
-  onSetLocationFilter: (filter: Extract<FilterKey, 'country' | 'state' | 'city'>, value: string) => void
-  onToggleFilter: (filter: FilterKey, value: string) => void
+  onApplyFilters: (filters: Partial<Record<FilterKey, string[]>>) => void
   totalCount: number
 }
 
@@ -945,18 +967,18 @@ function ContactsPage({
   onClearFilters,
   onOpenContact,
   onSaveList,
-  onSetLocationFilter,
-  onToggleFilter,
+  onApplyFilters,
   totalCount,
 }: ContactsPageProps) {
   const tableRef = useRef<HTMLDivElement>(null)
   const [filterSearchQuery, setFilterSearchQuery] = useState('')
   const [expandedFilters, setExpandedFilters] = useState<FilterKey[]>([])
+  const [draftFilters, setDraftFilters] = useState<Partial<Record<FilterKey, string[]>>>(filters)
   const [isSaveListFormOpen, setIsSaveListFormOpen] = useState(false)
   const [saveListName, setSaveListName] = useState('')
-  const countryValue = filters.country?.[0] ?? ''
-  const stateValue = filters.state?.[0] ?? ''
-  const cityValue = filters.city?.[0] ?? ''
+  const countryValue = draftFilters.country?.[0] ?? ''
+  const stateValue = draftFilters.state?.[0] ?? ''
+  const cityValue = draftFilters.city?.[0] ?? ''
   const stateOptions = countryValue ? (locationIndex.statesByCountry[countryValue] ?? []) : []
   const cityOptions = countryValue
     ? stateOptions.length > 0
@@ -965,7 +987,8 @@ function ContactsPage({
         : []
       : (locationIndex.citiesByCountryState[countryValue]?.[''] ?? [])
     : []
-  const hasActiveFilters = FILTER_KEYS.some((filter) => (filters[filter] ?? []).length > 0)
+  const hasActiveFilters = FILTER_KEYS.some((filter) => (filters[filter] ?? []).length > 0 || (draftFilters[filter] ?? []).length > 0)
+  const hasPendingFilterChanges = !areFilterSetsEqual(filters, draftFilters)
   const allColumns = useMemo(() => [...DEFAULT_VISIBLE_COLUMNS, ...OPTIONAL_COLUMNS], [])
   const [visibleColumns, setVisibleColumns] = useState<ContactColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
   const [draftVisibleColumns, setDraftVisibleColumns] = useState<ContactColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
@@ -983,6 +1006,27 @@ function ContactsPage({
     overscan: 8,
   })
   const virtualRows = rowVirtualizer.getVirtualItems()
+
+  useEffect(() => {
+    setDraftFilters(filters)
+  }, [filters])
+
+  function toggleDraftFilter(filter: FilterKey, value: string) {
+    setDraftFilters((currentFilters) => toggleFilterValue(currentFilters, filter, value))
+  }
+
+  function setDraftLocationFilter(filter: Extract<FilterKey, 'country' | 'state' | 'city'>, value: string) {
+    setDraftFilters((currentFilters) => setDraftLocationValue(currentFilters, filter, value))
+  }
+
+  function applyDraftFilters() {
+    onApplyFilters(draftFilters)
+  }
+
+  function clearDraftAndAppliedFilters() {
+    setDraftFilters({})
+    onClearFilters()
+  }
 
   function toggleDraftColumn(column: ContactColumnKey) {
     setDraftVisibleColumns((currentColumns) => {
@@ -1044,7 +1088,6 @@ function ContactsPage({
           <Filter size={18} aria-hidden="true" />
           <h2>Filters</h2>
         </div>
-        <p className="panel-copy">OR inside each group, AND across groups.</p>
         <label className="field-stack filter-search-control">
           <span>Search filter values</span>
           <input
@@ -1053,15 +1096,20 @@ function ContactsPage({
             placeholder="Find filter value"
           />
         </label>
-        <button className="secondary-action clear-filters-button" type="button" onClick={onClearFilters} disabled={!hasActiveFilters}>
-          Clear filters
-        </button>
+        <div className="filter-action-row">
+          <button className="primary-action apply-filters-button" type="button" onClick={applyDraftFilters} disabled={!hasPendingFilterChanges}>
+            Apply filters
+          </button>
+          <button className="secondary-action clear-filters-button" type="button" onClick={clearDraftAndAppliedFilters} disabled={!hasActiveFilters}>
+            Clear filters
+          </button>
+        </div>
         <LocationCascadeFilters
           cityOptions={cityOptions}
           cityValue={cityValue}
           countryOptions={locationIndex.countries}
           countryValue={countryValue}
-          onChange={onSetLocationFilter}
+          onChange={setDraftLocationFilter}
           stateOptions={stateOptions}
           stateValue={stateValue}
         />
@@ -1071,7 +1119,7 @@ function ContactsPage({
               <p className="filter-label">{labelForColumn(filter)}</p>
               <div className="filter-list">
                 {getFilterOptions(filter).map((option) => {
-                    const isActive = filters[filter]?.includes(option) ?? false
+                    const isActive = draftFilters[filter]?.includes(option) ?? false
 
                     return (
                       <button
@@ -1079,7 +1127,7 @@ function ContactsPage({
                         className={`filter-chip ${isActive ? 'active' : ''}`}
                         type="button"
                         key={option}
-                        onClick={() => onToggleFilter(filter, option)}
+                        onClick={() => toggleDraftFilter(filter, option)}
                       >
                         {option}
                       </button>
