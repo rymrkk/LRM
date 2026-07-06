@@ -254,6 +254,30 @@ describe('App shell', () => {
     expect(screen.queryByRole('columnheader', { name: /country/i })).not.toBeInTheDocument()
   })
 
+
+  it('persists contact notes and tags locally by contact id', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /open maria santos/i }))
+
+    const notes = screen.getByRole('textbox', { name: /notes/i })
+    const tags = screen.getByRole('textbox', { name: /tags/i })
+
+    await user.clear(notes)
+    await user.type(notes, 'Call after the product demo.')
+    await user.clear(tags)
+    await user.type(tags, 'priority, demo')
+
+    expect(window.localStorage.getItem('lrm:workspace-10124:contact-annotations')).toContain('Call after the product demo.')
+
+    await user.click(screen.getByRole('button', { name: /close contact detail/i }))
+    await user.click(screen.getByRole('button', { name: /open maria santos/i }))
+
+    expect(screen.getByRole('textbox', { name: /notes/i })).toHaveValue('Call after the product demo.')
+    expect(screen.getByRole('textbox', { name: /tags/i })).toHaveValue('priority, demo')
+  })
   it('opens the contact detail drawer from a contact row', async () => {
     const user = userEvent.setup()
 

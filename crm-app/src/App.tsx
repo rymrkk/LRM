@@ -144,6 +144,7 @@ const SAMPLE_CONTACTS: ContactRecord[] = [
 const WORKSPACE_ID = 'workspace-10124'
 const USER_ID = 'single-user'
 const SAVED_LISTS_STORAGE_KEY = 'lrm:workspace-10124:saved-lists'
+const CONTACT_ANNOTATIONS_STORAGE_KEY = 'lrm:workspace-10124:contact-annotations'
 
 const SAVED_LISTS: SavedList[] = [
   {
@@ -169,6 +170,65 @@ const SAVED_LISTS: SavedList[] = [
 ]
 
 
+
+type ContactAnnotation = {
+  notes: string
+  tags: string
+}
+
+type ContactAnnotations = Record<string, ContactAnnotation>
+
+const EMPTY_CONTACT_ANNOTATION: ContactAnnotation = {
+  notes: '',
+  tags: '',
+}
+
+function normalizeStoredContactAnnotation(row: unknown): ContactAnnotation {
+  if (!row || typeof row !== 'object') {
+    return EMPTY_CONTACT_ANNOTATION
+  }
+
+  const candidate = row as Partial<ContactAnnotation>
+
+  return {
+    notes: typeof candidate.notes === 'string' ? candidate.notes : '',
+    tags: typeof candidate.tags === 'string' ? candidate.tags : '',
+  }
+}
+
+function readContactAnnotationsFromStorage(): ContactAnnotations {
+  if (typeof window === 'undefined') {
+    return {}
+  }
+
+  const rawValue = window.localStorage.getItem(CONTACT_ANNOTATIONS_STORAGE_KEY)
+
+  if (!rawValue) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {}
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).map(([contactId, annotation]) => [contactId, normalizeStoredContactAnnotation(annotation)]),
+    )
+  } catch {
+    return {}
+  }
+}
+
+function persistContactAnnotations(annotations: ContactAnnotations) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(CONTACT_ANNOTATIONS_STORAGE_KEY, JSON.stringify(annotations))
+}
 function createClientId(prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return `${prefix}-${crypto.randomUUID()}`
@@ -311,6 +371,7 @@ function App() {
   const [filters, setFilters] = useState<Partial<Record<FilterKey, string[]>>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [savedLists, setSavedLists] = useState<SavedList[]>(readSavedListsFromStorage)
+  const [contactAnnotations, setContactAnnotations] = useState<ContactAnnotations>(readContactAnnotationsFromStorage)
 
   useEffect(() => {
     if (typeof fetch !== 'function') return
@@ -360,6 +421,21 @@ function App() {
     setFilters(savedList.filters_json)
     setSearchQuery(savedList.search_query)
     setActiveView('contacts')
+  }
+
+  function updateContactAnnotation(contactId: string, changes: Partial<ContactAnnotation>) {
+    setContactAnnotations((currentAnnotations) => {
+      const nextAnnotations = {
+        ...currentAnnotations,
+        [contactId]: {
+          ...(currentAnnotations[contactId] ?? EMPTY_CONTACT_ANNOTATION),
+          ...changes,
+        },
+      }
+
+      persistContactAnnotations(nextAnnotations)
+      return nextAnnotations
+    })
   }
 
   return (
@@ -474,7 +550,14 @@ function App() {
         {activeView === 'saved-lists' && <SavedListsPage onOpenSavedList={openSavedList} savedLists={savedLists} />}
       </section>
 
-      {selectedContact && <ContactDetailDrawer contact={selectedContact} onClose={() => setSelectedContact(null)} />}
+      {selectedContact && (
+        <ContactDetailDrawer
+          annotation={contactAnnotations[selectedContact.id] ?? EMPTY_CONTACT_ANNOTATION}
+          contact={selectedContact}
+          onChangeAnnotation={(changes) => updateContactAnnotation(selectedContact.id, changes)}
+          onClose={() => setSelectedContact(null)}
+        />
+      )}
     </main>
   )
 }
@@ -832,11 +915,13 @@ function SavedListsPage({ onOpenSavedList, savedLists }: SavedListsPageProps) {
 }
 
 type ContactDetailDrawerProps = {
+  annotation: ContactAnnotation
   contact: ContactRecord
+  onChangeAnnotation: (changes: Partial<ContactAnnotation>) => void
   onClose: () => void
 }
 
-function ContactDetailDrawer({ contact, onClose }: ContactDetailDrawerProps) {
+function ContactDetailDrawer({ annotation, contact, onChangeAnnotation, onClose }: ContactDetailDrawerProps) {
   const bestPhone = deriveBestPhone(contact)
 
   return (
@@ -893,11 +978,15 @@ function ContactDetailDrawer({ contact, onClose }: ContactDetailDrawerProps) {
       <div className="detail-block drawer-fields">
         <label className="field-stack">
           <span>Notes</span>
-          <textarea defaultValue="Follow up after workspace persistence is connected." rows={4} />
+          <textarea
+            value={annotation.notes}
+            onChange={(event) => onChangeAnnotation({ notes: event.target.value })}
+            rows={4}
+          />
         </label>
         <label className="field-stack">
           <span>Tags</span>
-          <input defaultValue="priority, sales" />
+          <input value={annotation.tags} onChange={(event) => onChangeAnnotation({ tags: event.target.value })} />
         </label>
       </div>
     </aside>
