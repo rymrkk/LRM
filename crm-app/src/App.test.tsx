@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -43,7 +43,6 @@ describe('App shell', () => {
       ...window.navigator,
       clipboard: { writeText },
     })
-
     render(<App />)
 
     expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
@@ -55,6 +54,34 @@ describe('App shell', () => {
     expect(screen.queryByText('Copied!')).not.toBeInTheDocument()
   })
 
+  it('uses wider fixed tracks for company, email, and phone columns', async () => {
+    render(<App />)
+
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
+
+    const headerRow = screen.getByRole('columnheader', { name: /company/i }).closest('[role="row"]')
+
+    expect(headerRow).toHaveStyle({
+      gridTemplateColumns: '150px 150px 110px 220px 260px 170px 110px 120px',
+    })
+  })
+
+  it('renders LinkedIn table values as links and missing values as placeholders', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await user.click(screen.getByRole('checkbox', { name: /linkedin profile/i }))
+    await user.click(screen.getByRole('button', { name: /apply columns/i }))
+
+    expect(screen.getByRole('link', { name: /open linkedin profile for maria santos/i })).toHaveAttribute(
+      'href',
+      'https://linkedin.com/in/maria-santos',
+    )
+    expect(screen.getByRole('link', { name: /open linkedin profile for maria santos/i })).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('link', { name: /open linkedin profile for maria santos/i })).toHaveAttribute('rel', 'noreferrer noopener')
+    expect(screen.getAllByText('\u2014').length).toBeGreaterThan(0)
+  })
   it('switches between companies and saved lists shells', async () => {
     const user = userEvent.setup()
 
@@ -312,7 +339,7 @@ describe('App shell', () => {
   })
 
 
-  it('persists contact notes and tags locally by contact id', async () => {
+  it('saves contact notes tags and status only after Save changes is clicked', async () => {
     const user = userEvent.setup()
 
     render(<App />)
@@ -321,15 +348,26 @@ describe('App shell', () => {
 
     const notes = screen.getByRole('textbox', { name: /notes/i })
     const tags = screen.getByRole('textbox', { name: /tags/i })
+    const status = screen.getByRole('combobox', { name: /lead status/i })
 
+    expect(status).toHaveValue('New')
+
+    await user.selectOptions(status, 'Qualified')
     await user.clear(notes)
     await user.type(notes, 'Call after the product demo.')
     await user.clear(tags)
     await user.type(tags, 'priority, demo')
 
     expect(window.localStorage.getItem('lrm:workspace-10124:contact-annotations') ?? '').not.toContain('Call after the product demo.')
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(screen.getByText('Saved')).toBeInTheDocument()
+    expect(screen.getByText('priority')).toHaveClass('tag-chip')
+    expect(screen.getByText('demo')).toHaveClass('tag-chip')
     await waitFor(() => {
       expect(window.localStorage.getItem('lrm:workspace-10124:contact-annotations')).toContain('Call after the product demo.')
+      expect(window.localStorage.getItem('lrm:workspace-10124:contact-annotations')).toContain('Qualified')
     })
 
     await user.click(screen.getByRole('button', { name: /close contact detail/i }))
@@ -337,9 +375,17 @@ describe('App shell', () => {
 
     expect(screen.getByRole('textbox', { name: /notes/i })).toHaveValue('Call after the product demo.')
     expect(screen.getByRole('textbox', { name: /tags/i })).toHaveValue('priority, demo')
+    expect(screen.getByRole('combobox', { name: /lead status/i })).toHaveValue('Qualified')
   })
-  it('opens the contact detail drawer from a contact row', async () => {
+  it('opens a complete contact detail drawer with copy actions and no metadata block', async () => {
     const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+
+    vi.stubGlobal('navigator', {
+      ...window.navigator,
+      clipboard: { writeText },
+    })
+    window.localStorage.removeItem('lrm:workspace-10124:contact-annotations')
 
     render(<App />)
 
@@ -347,11 +393,75 @@ describe('App shell', () => {
 
     expect(screen.getByRole('dialog', { name: /contact detail/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /maria santos/i })).toBeInTheDocument()
+    expect(screen.getAllByText('VP Sales').find((element) => element.classList.contains('drawer-subtitle'))).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: /lead status/i })).toHaveValue('New')
     expect(screen.getByRole('link', { name: /email maria santos/i })).toHaveAttribute(
       'href',
       'mailto:maria.santos@example.com',
     )
-    expect(screen.getByRole('textbox', { name: /notes/i })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: /tags/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /open linkedin profile for maria santos/i })).toHaveAttribute(
+      'href',
+      'https://linkedin.com/in/maria-santos',
+    )
+    expect(screen.getByText('328 (201-500)')).toBeInTheDocument()
+    expect(screen.queryByText(/metadata/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /copy email maria.santos@example.com/i }))
+    expect(writeText).toHaveBeenCalledWith('maria.santos@example.com')
+
+    await user.click(within(screen.getByRole('dialog', { name: /contact detail/i })).getByRole('button', { name: /copy phone number \+1 555 0100/i }))
+    expect(writeText).toHaveBeenCalledWith('+1 555 0100')
+    expect(screen.queryByText('Copied!')).not.toBeInTheDocument()
+  })
+
+  it('opens same-company related contacts inside the contact detail drawer', async () => {
+    const user = userEvent.setup()
+    const contacts = [
+      {
+        id: 'related-001',
+        name: 'Avery Chen',
+        email: 'avery@example.com',
+        company_name: 'Northstar Labs',
+        job_title: 'Revenue Lead',
+        seniority: 'Lead',
+        job_function: 'Sales',
+        job_sector: 'Software',
+        mobile_phone: '+1 555 0190',
+        executive_linkedin_profile: 'https://linkedin.com/in/avery-chen',
+        employees: '328',
+        employee_range: '201-500',
+        city: 'Austin',
+        state: 'TX',
+        country: 'United States',
+      },
+      {
+        id: 'related-002',
+        name: 'Blake Rivera',
+        email: 'blake@example.com',
+        company_name: 'Northstar Labs',
+        job_title: 'Account Director',
+        seniority: 'Director',
+        job_function: 'Sales',
+        job_sector: 'Software',
+        city: 'Austin',
+        state: 'TX',
+        country: 'United States',
+      },
+    ]
+
+    vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => contacts }) as Response)
+
+    render(<App />)
+
+    expect(await screen.findByText(/2 of 2 shown/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /open avery chen/i }))
+
+    const relatedButton = screen.getByRole('button', { name: /open related contact blake rivera/i })
+    expect(relatedButton).toHaveClass('related-contact-button')
+
+    await user.click(relatedButton)
+
+    expect(screen.getByRole('heading', { name: /blake rivera/i })).toBeInTheDocument()
+    expect(screen.getAllByText('Account Director').find((element) => element.classList.contains('drawer-subtitle'))).toBeTruthy()
   })
 })

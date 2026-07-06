@@ -4,6 +4,7 @@ import {
   Check,
   Columns3,
   Copy,
+  ExternalLink,
   Filter,
   ListChecks,
   Mail,
@@ -151,6 +152,8 @@ const SAVED_LISTS_STORAGE_KEY = 'lrm:workspace-10124:saved-lists'
 const CONTACT_ANNOTATIONS_STORAGE_KEY = 'lrm:workspace-10124:contact-annotations'
 const LOCAL_WORKSPACES_STORAGE_KEY = 'lrm:workspace-10124:local-workspaces'
 const STORAGE_WRITE_DEBOUNCE_MS = 500
+const COPY_FEEDBACK_MS = 1600
+const EMPTY_DISPLAY_VALUE = '\u2014'
 
 let contactAnnotationsPersistTimer: number | undefined
 let savedListsPersistTimer: number | undefined
@@ -180,9 +183,14 @@ const SAVED_LISTS: SavedList[] = [
 
 
 
+type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Lost'
+
+const LEAD_STATUS_OPTIONS: LeadStatus[] = ['New', 'Contacted', 'Qualified', 'Lost']
+
 type ContactAnnotation = {
   notes: string
   tags: string
+  status: LeadStatus
 }
 
 type ContactAnnotations = Record<string, ContactAnnotation>
@@ -190,6 +198,11 @@ type ContactAnnotations = Record<string, ContactAnnotation>
 const EMPTY_CONTACT_ANNOTATION: ContactAnnotation = {
   notes: '',
   tags: '',
+  status: 'New',
+}
+
+function normalizeLeadStatus(value: unknown): LeadStatus {
+  return LEAD_STATUS_OPTIONS.includes(value as LeadStatus) ? (value as LeadStatus) : 'New'
 }
 
 function normalizeStoredContactAnnotation(row: unknown): ContactAnnotation {
@@ -202,6 +215,7 @@ function normalizeStoredContactAnnotation(row: unknown): ContactAnnotation {
   return {
     notes: typeof candidate.notes === 'string' ? candidate.notes : '',
     tags: typeof candidate.tags === 'string' ? candidate.tags : '',
+    status: normalizeLeadStatus(candidate.status),
   }
 }
 
@@ -425,14 +439,42 @@ function getColumnValue(contact: ContactRecord, column: ContactColumnKey) {
   return contact[column] ?? ''
 }
 
+function formatCellValue(value: unknown) {
+  if (typeof value !== 'string') {
+    return value == null ? EMPTY_DISPLAY_VALUE : String(value)
+  }
+
+  const trimmedValue = value.trim()
+  return trimmedValue ? trimmedValue : EMPTY_DISPLAY_VALUE
+}
+
+function normalizeComparableValue(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLocaleLowerCase() : ''
+}
+
+function formatEmployees(contact: ContactRecord) {
+  const employees = formatCellValue(contact.employees)
+  const employeeRange = formatCellValue(contact.employee_range)
+
+  if (employees === EMPTY_DISPLAY_VALUE && employeeRange === EMPTY_DISPLAY_VALUE) {
+    return EMPTY_DISPLAY_VALUE
+  }
+
+  if (employees !== EMPTY_DISPLAY_VALUE && employeeRange !== EMPTY_DISPLAY_VALUE) {
+    return `${employees} (${employeeRange})`
+  }
+
+  return employees !== EMPTY_DISPLAY_VALUE ? employees : employeeRange
+}
+
 function getColumnWidth(column: ContactColumnKey) {
   const columnWidths: Partial<Record<ContactColumnKey, string>> = {
     name: '150px',
     job_title: '150px',
     seniority: '110px',
-    company_name: '170px',
-    email: '220px',
-    best_phone: '130px',
+    company_name: '220px',
+    email: '260px',
+    best_phone: '170px',
     city: '110px',
     country: '120px',
     job_function: '180px',
@@ -589,14 +631,11 @@ function App() {
     setActiveView('contacts')
   }
 
-  function updateContactAnnotation(contactId: string, changes: Partial<ContactAnnotation>) {
+  function saveContactAnnotation(contactId: string, annotation: ContactAnnotation) {
     setContactAnnotations((currentAnnotations) => {
       const nextAnnotations = {
         ...currentAnnotations,
-        [contactId]: {
-          ...(currentAnnotations[contactId] ?? EMPTY_CONTACT_ANNOTATION),
-          ...changes,
-        },
+        [contactId]: annotation,
       }
 
       persistContactAnnotations(nextAnnotations)
@@ -744,7 +783,9 @@ function App() {
         <ContactDetailDrawer
           annotation={contactAnnotations[selectedContact.id] ?? EMPTY_CONTACT_ANNOTATION}
           contact={selectedContact}
-          onChangeAnnotation={(changes) => updateContactAnnotation(selectedContact.id, changes)}
+          contacts={contacts}
+          onOpenContact={setSelectedContact}
+          onSaveAnnotation={(annotation) => saveContactAnnotation(selectedContact.id, annotation)}
           onClose={() => setSelectedContact(null)}
         />
       )}
@@ -1149,8 +1190,6 @@ type ContactTableRowProps = {
   visibleColumns: ContactColumnKey[]
 }
 
-const COPY_FEEDBACK_MS = 1600
-
 const ContactTableRow = memo(function ContactTableRow({
   contact,
   gridTemplateColumns,
@@ -1193,14 +1232,17 @@ const ContactTableRow = memo(function ContactTableRow({
       style={{ ...style, gridTemplateColumns }}
     >
       {visibleColumns.map((column) => {
+        const rawValue = getColumnValue(contact, column)
+        const displayValue = formatCellValue(rawValue)
         const phoneNumber = column === 'best_phone' ? deriveBestPhone(contact) : ''
+        const linkedInUrl = column === 'executive_linkedin_profile' ? formatCellValue(rawValue) : ''
 
         return (
           <span className={column === 'best_phone' ? 'phone-cell-wrapper' : undefined} role="cell" key={column}>
             {column === 'name' ? (
               <button className="contact-row-button" type="button" onClick={() => onOpenContact(contact)}>
-                <span>{contact.name}</span>
-                <span className="sr-only">Open {contact.name}</span>
+                <span>{formatCellValue(contact.name)}</span>
+                <span className="sr-only">Open {formatCellValue(contact.name)}</span>
               </button>
             ) : column === 'best_phone' && phoneNumber ? (
               <>
@@ -1218,8 +1260,19 @@ const ContactTableRow = memo(function ContactTableRow({
                   )}
                 </button>
               </>
+            ) : column === 'executive_linkedin_profile' && linkedInUrl !== EMPTY_DISPLAY_VALUE ? (
+              <a
+                className="external-cell-link"
+                href={linkedInUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label={`Open LinkedIn profile for ${formatCellValue(contact.name)}`}
+              >
+                <span>{linkedInUrl}</span>
+                <ExternalLink size={13} aria-hidden="true" />
+              </a>
             ) : (
-              getColumnValue(contact, column)
+              displayValue
             )}
           </span>
         )
@@ -1300,19 +1353,129 @@ function SavedListsPage({ onOpenSavedList, savedLists }: SavedListsPageProps) {
 type ContactDetailDrawerProps = {
   annotation: ContactAnnotation
   contact: ContactRecord
-  onChangeAnnotation: (changes: Partial<ContactAnnotation>) => void
+  contacts: ContactRecord[]
+  onOpenContact: (contact: ContactRecord) => void
+  onSaveAnnotation: (annotation: ContactAnnotation) => void
   onClose: () => void
 }
 
-function ContactDetailDrawer({ annotation, contact, onChangeAnnotation, onClose }: ContactDetailDrawerProps) {
+function ContactDetailDrawer({
+  annotation,
+  contact,
+  contacts,
+  onOpenContact,
+  onSaveAnnotation,
+  onClose,
+}: ContactDetailDrawerProps) {
+  const [draftAnnotation, setDraftAnnotation] = useState<ContactAnnotation>(annotation)
+  const [copiedValue, setCopiedValue] = useState('')
+  const [saveFeedback, setSaveFeedback] = useState(false)
+  const copyFeedbackTimer = useRef<number | null>(null)
+  const saveFeedbackTimer = useRef<number | null>(null)
   const bestPhone = deriveBestPhone(contact)
+  const contactName = formatCellValue(contact.name)
+  const companyName = formatCellValue(contact.company_name)
+  const linkedInUrl = formatCellValue(contact.executive_linkedin_profile)
+  const address = [contact.street, contact.city, contact.state, contact.postal_code, contact.country]
+    .map(formatCellValue)
+    .filter((value) => value !== EMPTY_DISPLAY_VALUE)
+    .join(', ')
+  const tagChips = draftAnnotation.tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+  const relatedContacts = useMemo(() => {
+    const normalizedCompanyName = normalizeComparableValue(contact.company_name)
+
+    if (!normalizedCompanyName) return []
+
+    return contacts
+      .filter((relatedContact) => {
+        return (
+          relatedContact.id !== contact.id &&
+          normalizeComparableValue(relatedContact.company_name) === normalizedCompanyName
+        )
+      })
+      .slice(0, 8)
+  }, [contact.company_name, contact.id, contacts])
+
+  useEffect(() => {
+    setDraftAnnotation(annotation)
+  }, [annotation, contact.id])
+
+  useEffect(() => {
+    setCopiedValue('')
+    setSaveFeedback(false)
+  }, [contact.id])
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimer.current) {
+        window.clearTimeout(copyFeedbackTimer.current)
+      }
+
+      if (saveFeedbackTimer.current) {
+        window.clearTimeout(saveFeedbackTimer.current)
+      }
+    }
+  }, [])
+
+  async function copyValue(value: string) {
+    if (!value || value === EMPTY_DISPLAY_VALUE || !navigator.clipboard?.writeText) return
+
+    await navigator.clipboard.writeText(value)
+    setCopiedValue(value)
+
+    if (copyFeedbackTimer.current) {
+      window.clearTimeout(copyFeedbackTimer.current)
+    }
+
+    copyFeedbackTimer.current = window.setTimeout(() => {
+      setCopiedValue('')
+      copyFeedbackTimer.current = null
+    }, COPY_FEEDBACK_MS)
+  }
+
+  function saveChanges() {
+    onSaveAnnotation(draftAnnotation)
+    setSaveFeedback(true)
+
+    if (saveFeedbackTimer.current) {
+      window.clearTimeout(saveFeedbackTimer.current)
+    }
+
+    saveFeedbackTimer.current = window.setTimeout(() => {
+      setSaveFeedback(false)
+      saveFeedbackTimer.current = null
+    }, COPY_FEEDBACK_MS)
+  }
 
   return (
     <aside className="detail-drawer drawer-open" role="dialog" aria-label="Contact detail" aria-modal="false">
       <div className="drawer-header">
-        <div>
+        <div className="drawer-title-stack">
           <p className="eyebrow">Contact Detail</p>
-          <h2>{contact.name}</h2>
+          <h2>{contactName}</h2>
+          <p className="drawer-subtitle">{formatCellValue(contact.job_title)}</p>
+          <label className="lead-status-control">
+            <span>Lead status</span>
+            <select
+              aria-label="Lead status"
+              value={draftAnnotation.status}
+              onChange={(event) =>
+                setDraftAnnotation((currentAnnotation) => ({
+                  ...currentAnnotation,
+                  status: normalizeLeadStatus(event.target.value),
+                }))
+              }
+            >
+              {LEAD_STATUS_OPTIONS.map((status) => (
+                <option value={status} key={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <button className="icon-button" type="button" aria-label="Close contact detail" onClick={onClose}>
           <X size={18} aria-hidden="true" />
@@ -1321,59 +1484,150 @@ function ContactDetailDrawer({ annotation, contact, onChangeAnnotation, onClose 
 
       <div className="detail-block">
         <p className="eyebrow">Contact</p>
-        <div className="link-list">
-          {contact.email && (
-            <a aria-label={`Email ${contact.name}`} href={`mailto:${contact.email}`}>
-              <Mail size={16} aria-hidden="true" />
-              {contact.email}
-            </a>
+        <div className="detail-row">
+          <span>Email</span>
+          {contact.email ? (
+            <div className="drawer-copy-row">
+              <a aria-label={`Email ${contact.name}`} href={`mailto:${contact.email}`}>
+                <Mail size={16} aria-hidden="true" />
+                {contact.email}
+              </a>
+              <button
+                className="copy-phone-button"
+                type="button"
+                onClick={() => void copyValue(contact.email ?? '')}
+                aria-label={`Copy email ${contact.email}`}
+              >
+                {copiedValue === contact.email ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+              </button>
+            </div>
+          ) : (
+            <span>{EMPTY_DISPLAY_VALUE}</span>
           )}
-          {bestPhone && (
-            <a href={`tel:${bestPhone.replaceAll(' ', '')}`}>
-              <Phone size={16} aria-hidden="true" />
-              {bestPhone}
+        </div>
+        <div className="detail-row">
+          <span>Phone</span>
+          {bestPhone ? (
+            <div className="drawer-copy-row">
+              <a href={`tel:${bestPhone.replaceAll(' ', '')}`}>
+                <Phone size={16} aria-hidden="true" />
+                <span className="phone-number-text">{bestPhone}</span>
+              </a>
+              <button
+                className="copy-phone-button"
+                type="button"
+                onClick={() => void copyValue(bestPhone)}
+                aria-label={`Copy phone number ${bestPhone}`}
+              >
+                {copiedValue === bestPhone ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+              </button>
+            </div>
+          ) : (
+            <span>{EMPTY_DISPLAY_VALUE}</span>
+          )}
+        </div>
+        <div className="detail-row">
+          <span>LinkedIn</span>
+          {linkedInUrl !== EMPTY_DISPLAY_VALUE ? (
+            <a
+              className="drawer-external-link"
+              href={linkedInUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              aria-label={`Open LinkedIn profile for ${contactName}`}
+            >
+              <ExternalLink size={15} aria-hidden="true" />
+              {linkedInUrl}
             </a>
+          ) : (
+            <span>{EMPTY_DISPLAY_VALUE}</span>
           )}
         </div>
       </div>
 
       <div className="detail-block">
         <p className="eyebrow">Company</p>
-        <p>{contact.company_name}</p>
-        <p>{contact.job_title} / {contact.job_function} / {contact.employee_range}</p>
+        <div className="detail-row">
+          <span>Company</span>
+          <strong>{companyName}</strong>
+        </div>
+        <div className="detail-row">
+          <span>Employees</span>
+          <span>{formatEmployees(contact)}</span>
+        </div>
+        <div className="detail-row">
+          <span>Function</span>
+          <span>{formatCellValue(contact.job_function)}</span>
+        </div>
+        <div className="detail-row">
+          <span>Sector</span>
+          <span>{formatCellValue(contact.job_sector)}</span>
+        </div>
       </div>
 
       <div className="detail-block">
         <p className="eyebrow">Address</p>
         <p className="inline-note">
           <MapPin size={16} aria-hidden="true" />
-          {[contact.street, contact.city, contact.state, contact.postal_code, contact.country].filter(Boolean).join(', ')}
+          {address || EMPTY_DISPLAY_VALUE}
         </p>
-      </div>
-
-      <div className="detail-block">
-        <p className="eyebrow">Metadata</p>
-        <p>ID: {contact.id}</p>
-        <p>Sources: {contact.sources}</p>
-        <p>Record path: {contact.recordPath}</p>
       </div>
 
       <div className="detail-block drawer-fields">
         <label className="field-stack">
           <span>Notes</span>
           <textarea
-            value={annotation.notes}
-            onChange={(event) => onChangeAnnotation({ notes: event.target.value })}
+            value={draftAnnotation.notes}
+            onChange={(event) =>
+              setDraftAnnotation((currentAnnotation) => ({ ...currentAnnotation, notes: event.target.value }))
+            }
             rows={4}
           />
         </label>
         <label className="field-stack">
           <span>Tags</span>
-          <input value={annotation.tags} onChange={(event) => onChangeAnnotation({ tags: event.target.value })} />
+          <input
+            value={draftAnnotation.tags}
+            onChange={(event) =>
+              setDraftAnnotation((currentAnnotation) => ({ ...currentAnnotation, tags: event.target.value }))
+            }
+          />
         </label>
+        {tagChips.length > 0 && (
+          <div className="tag-chip-list" aria-label="Contact tags">
+            {tagChips.map((tag) => (
+              <span className="tag-chip" key={tag}>{tag}</span>
+            ))}
+          </div>
+        )}
+        <div className="annotation-actions">
+          <button className="primary-action" type="button" onClick={saveChanges}>
+            Save changes
+          </button>
+          {saveFeedback && <span className="save-feedback" role="status">Saved</span>}
+        </div>
       </div>
+
+      {relatedContacts.length > 0 && (
+        <div className="detail-block">
+          <p className="eyebrow">Related contacts</p>
+          <div className="related-contact-list">
+            {relatedContacts.map((relatedContact) => (
+              <button
+                className="related-contact-button"
+                type="button"
+                key={relatedContact.id}
+                onClick={() => onOpenContact(relatedContact)}
+                aria-label={`Open related contact ${formatCellValue(relatedContact.name)}`}
+              >
+                <strong>{formatCellValue(relatedContact.name)}</strong>
+                <span>{formatCellValue(relatedContact.job_title)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </aside>
   )
 }
-
 export default App
