@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react'
 import {
   Building2,
   Check,
@@ -1225,10 +1225,25 @@ const ContactTableRow = memo(function ContactTableRow({
     }, COPY_FEEDBACK_MS)
   }
 
+  function openContactFromRow() {
+    onOpenContact(contact)
+  }
+
+  function openContactFromKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
+
+    event.preventDefault()
+    openContactFromRow()
+  }
+
   return (
     <div
-      className={`mock-row ${virtualized ? 'virtual-row' : ''}`}
+      aria-label={`Open ${formatCellValue(contact.name)} record`}
+      className={`mock-row contact-data-row ${virtualized ? 'virtual-row' : ''}`}
       role="row"
+      tabIndex={0}
+      onClick={openContactFromRow}
+      onKeyDown={openContactFromKeyboard}
       style={{ ...style, gridTemplateColumns }}
     >
       {visibleColumns.map((column) => {
@@ -1240,7 +1255,14 @@ const ContactTableRow = memo(function ContactTableRow({
         return (
           <span className={column === 'best_phone' ? 'phone-cell-wrapper' : undefined} role="cell" key={column}>
             {column === 'name' ? (
-              <button className="contact-row-button" type="button" onClick={() => onOpenContact(contact)}>
+              <button
+                className="contact-row-button"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onOpenContact(contact)
+                }}
+              >
                 <span>{formatCellValue(contact.name)}</span>
                 <span className="sr-only">Open {formatCellValue(contact.name)}</span>
               </button>
@@ -1250,7 +1272,10 @@ const ContactTableRow = memo(function ContactTableRow({
                 <button
                   className="copy-phone-button"
                   type="button"
-                  onClick={() => void copyPhoneNumber(phoneNumber)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void copyPhoneNumber(phoneNumber)
+                  }}
                   aria-label={`Copy phone number ${phoneNumber}`}
                 >
                   {copiedPhone === phoneNumber ? (
@@ -1267,6 +1292,7 @@ const ContactTableRow = memo(function ContactTableRow({
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label={`Open LinkedIn profile for ${formatCellValue(contact.name)}`}
+                onClick={(event) => event.stopPropagation()}
               >
                 <span>{linkedInUrl}</span>
                 <ExternalLink size={13} aria-hidden="true" />
@@ -1449,6 +1475,7 @@ function ContactDetailDrawer({
       saveFeedbackTimer.current = null
     }, COPY_FEEDBACK_MS)
   }
+
 
   return (
     <aside className="detail-drawer drawer-open" role="dialog" aria-label="Contact detail" aria-modal="false">

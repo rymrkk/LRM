@@ -65,6 +65,43 @@ describe('App shell', () => {
       gridTemplateColumns: '150px 150px 110px 220px 260px 170px 110px 120px',
     })
   })
+  it('opens the detail drawer when clicking any non-interactive contact row cell', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /contact detail/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('cell', { name: 'Northstar Labs' }))
+
+    expect(screen.getByRole('dialog', { name: /contact detail/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /maria santos/i })).toBeInTheDocument()
+  })
+
+  it('does not open the detail drawer when clicking row copy buttons or external links', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+
+    vi.stubGlobal('navigator', {
+      ...window.navigator,
+      clipboard: { writeText },
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /copy phone number \+1 555 0100/i }))
+
+    expect(writeText).toHaveBeenCalledWith('+1 555 0100')
+    expect(screen.queryByRole('dialog', { name: /contact detail/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: /linkedin profile/i }))
+    await user.click(screen.getByRole('button', { name: /apply columns/i }))
+    await user.click(screen.getByRole('link', { name: /open linkedin profile for maria santos/i }))
+
+    expect(screen.queryByRole('dialog', { name: /contact detail/i })).not.toBeInTheDocument()
+  })
 
   it('renders LinkedIn table values as links and missing values as placeholders', async () => {
     const user = userEvent.setup()
