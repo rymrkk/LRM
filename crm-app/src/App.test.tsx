@@ -283,6 +283,31 @@ describe('App shell', () => {
     expect(screen.queryByRole('columnheader', { name: /country/i })).not.toBeInTheDocument()
   })
 
+  it('uses responsive table tracks for newly visible generated columns', async () => {
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    await user.click(screen.getByRole('checkbox', { name: /job function/i }))
+    await user.click(screen.getByRole('checkbox', { name: /job sector/i }))
+    await user.click(screen.getByRole('button', { name: /apply columns/i }))
+
+    const headerRow = screen.getByRole('columnheader', { name: /job function/i }).closest('[role="row"]')
+
+    expect(screen.getByRole('columnheader', { name: /job sector/i })).toBeInTheDocument()
+    expect(headerRow).toHaveStyle({
+      gridTemplateColumns:
+        'minmax(150px, 1.05fr) minmax(180px, 1.15fr) minmax(130px, 0.75fr) minmax(180px, 1.15fr) minmax(240px, 1.35fr) minmax(140px, 0.8fr) minmax(130px, 0.75fr) minmax(150px, 0.8fr) minmax(220px, 1.2fr) minmax(260px, 1.4fr)',
+    })
+  })
+
+  it('keeps the native CSV input out of the visible workspace actions layout', () => {
+    render(<App />)
+
+    expect(screen.getByLabelText(/csv file/i)).toHaveClass('workspace-file-input')
+    expect(screen.getByRole('button', { name: /create workspace/i })).toHaveClass('secondary-action')
+    expect(screen.getByRole('button', { name: /upload csv/i })).toHaveClass('primary-action')
+  })
 
   it('persists contact notes and tags locally by contact id', async () => {
     const user = userEvent.setup()

@@ -425,25 +425,25 @@ function getColumnValue(contact: ContactRecord, column: ContactColumnKey) {
 
 function getColumnWidth(column: ContactColumnKey) {
   const columnWidths: Partial<Record<ContactColumnKey, string>> = {
-    name: '150px',
-    job_title: '150px',
-    seniority: '110px',
-    company_name: '170px',
-    email: '220px',
-    best_phone: '130px',
-    city: '110px',
-    country: '120px',
-    job_function: '180px',
-    job_sector: '220px',
-    employees: '110px',
-    employee_range: '150px',
-    state: '140px',
-    postal_code: '120px',
-    executive_linkedin_profile: '200px',
-    sources: '180px',
+    name: 'minmax(150px, 1.05fr)',
+    job_title: 'minmax(180px, 1.15fr)',
+    seniority: 'minmax(130px, 0.75fr)',
+    company_name: 'minmax(180px, 1.15fr)',
+    email: 'minmax(240px, 1.35fr)',
+    best_phone: 'minmax(140px, 0.8fr)',
+    city: 'minmax(130px, 0.75fr)',
+    country: 'minmax(150px, 0.8fr)',
+    job_function: 'minmax(220px, 1.2fr)',
+    job_sector: 'minmax(260px, 1.4fr)',
+    employees: 'minmax(140px, 0.75fr)',
+    employee_range: 'minmax(170px, 0.9fr)',
+    state: 'minmax(170px, 0.9fr)',
+    postal_code: 'minmax(140px, 0.75fr)',
+    executive_linkedin_profile: 'minmax(220px, 1.15fr)',
+    sources: 'minmax(190px, 1fr)',
   }
 
-  return columnWidths[column] ?? '140px'
+  return columnWidths[column] ?? 'minmax(150px, 1fr)'
 }
 
 function App() {
@@ -664,6 +664,7 @@ function App() {
             <input
               accept=".csv,text/csv"
               id="workspace-csv-file"
+              className="workspace-file-input"
               ref={fileInputRef}
               type="file"
               onChange={(event) => {
