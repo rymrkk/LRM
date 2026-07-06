@@ -435,10 +435,10 @@ a {
   display: grid;
   grid-template-columns: 150px 150px 110px 170px 220px 130px 110px 120px;
   min-width: 1160px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
 }
 
-.mock-row:last-child {
+.mock-row:last-child span {
   border-bottom: 0;
 }
 
@@ -446,6 +446,7 @@ a {
   min-width: 0;
   overflow: hidden;
   padding: 12px;
+  border-bottom: 1px solid var(--line);
   color: var(--ink);
   font-size: 13px;
   line-height: 1.35;
