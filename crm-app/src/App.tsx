@@ -664,6 +664,7 @@ function App() {
             <input
               accept=".csv,text/csv"
               id="workspace-csv-file"
+              className="workspace-file-input"
               ref={fileInputRef}
               type="file"
               onChange={(event) => {

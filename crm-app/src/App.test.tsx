@@ -27,6 +27,14 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: /save as list/i })).toBeInTheDocument()
   })
 
+  it('keeps workspace CSV actions constrained to the panel layout', () => {
+    render(<App />)
+
+    expect(screen.getByLabelText(/csv file/i)).toHaveClass('workspace-file-input')
+    expect(screen.getByRole('button', { name: /create workspace/i })).toHaveClass('secondary-action')
+    expect(screen.getByRole('button', { name: /upload csv/i })).toHaveClass('primary-action')
+  })
+
   it('switches between companies and saved lists shells', async () => {
     const user = userEvent.setup()
 
