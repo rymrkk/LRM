@@ -18,9 +18,10 @@ export type FilterKey =
   | 'seniority'
   | 'job_function'
   | 'job_sector'
+  | 'employee_range'
   | 'country'
   | 'state'
-  | 'employee_range'
+  | 'city'
 
 export type ContactFilters = Record<FilterKey, string[]>
 

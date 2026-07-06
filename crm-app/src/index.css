@@ -634,6 +634,25 @@ a {
 }
 
 
+.location-cascade {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cascade-control input:disabled {
+  cursor: not-allowed;
+  background: #eef1f6;
+  color: var(--muted);
+}
+
+.cascade-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
 .filter-search-control {
   margin-bottom: 10px;
 }

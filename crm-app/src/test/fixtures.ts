@@ -76,9 +76,10 @@ export function makeContactFilters(overrides: Partial<ContactFilters> = {}): Con
     seniority: [],
     job_function: [],
     job_sector: [],
+    employee_range: [],
     country: [],
     state: [],
-    employee_range: [],
+    city: [],
     ...overrides,
   }
 }

@@ -23,7 +23,7 @@ describe('App shell', () => {
     expect(screen.getByRole('group', { name: /column picker/i })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /all contacts/i })).toBeInTheDocument()
     expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
-    expect(screen.getAllByText('Region / State').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('State / Province').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /save as list/i })).toBeInTheDocument()
   })
 
@@ -131,13 +131,13 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: 'Executive' })).toHaveAttribute('aria-pressed', 'false')
   })
 
-  it('scopes Region / State options to the selected country and expands longer option groups', async () => {
+  it('uses cascading location comboboxes for country, state, and city', async () => {
     const user = userEvent.setup()
     const contacts = [
       {
         id: 'us-1',
-        name: 'US Contact',
-        email: 'us@example.com',
+        name: 'US Austin Contact',
+        email: 'austin@example.com',
         company_name: 'US Company',
         job_title: 'Director',
         seniority: 'Director',
@@ -145,6 +145,21 @@ describe('App shell', () => {
         job_sector: 'Software',
         country: 'United States',
         state: 'TX',
+        city: 'Austin',
+        employee_range: '51-200',
+      },
+      {
+        id: 'us-2',
+        name: 'US Dallas Contact',
+        email: 'dallas@example.com',
+        company_name: 'US Company',
+        job_title: 'Manager',
+        seniority: 'Manager',
+        job_function: 'Operations',
+        job_sector: 'Software',
+        country: 'United States',
+        state: 'TX',
+        city: 'Dallas',
         employee_range: '51-200',
       },
       {
@@ -158,46 +173,8 @@ describe('App shell', () => {
         job_sector: 'Software',
         country: 'France',
         state: '\u221A\u00E9le-de-France',
+        city: 'Paris',
         employee_range: '201-500',
-      },
-      {
-        id: 'pl-1',
-        name: 'Poland Contact',
-        email: 'pl@example.com',
-        company_name: 'Poland Company',
-        job_title: 'Manager',
-        seniority: 'Manager',
-        job_function: 'Operations',
-        job_sector: 'Manufacturing',
-        country: 'Poland',
-        state: '\u2248\u00C5\u221A\u2265d\u2248\u222B Voivodeship',
-        employee_range: '501-1000',
-      },
-      {
-        id: 'ca-1',
-        name: 'Canada Contact',
-        email: 'ca@example.com',
-        company_name: 'Canada Company',
-        job_title: 'Lead',
-        seniority: 'Lead',
-        job_function: 'Sales',
-        job_sector: 'Consulting',
-        country: 'Canada',
-        state: 'ON',
-        employee_range: '1001-5000',
-      },
-      {
-        id: 'sg-1',
-        name: 'Singapore Contact',
-        email: 'sg@example.com',
-        company_name: 'Singapore Company',
-        job_title: 'Head',
-        seniority: 'Head',
-        job_function: 'Leadership',
-        job_sector: 'Services',
-        country: 'Singapore',
-        state: 'Central Region',
-        employee_range: '5001-10000',
       },
       {
         id: 'jp-1',
@@ -210,6 +187,7 @@ describe('App shell', () => {
         job_sector: 'Technology',
         country: 'Japan',
         state: 'Tokyo',
+        city: 'Tokyo',
         employee_range: '10001+',
       },
     ]
@@ -218,16 +196,40 @@ describe('App shell', () => {
 
     render(<App />)
 
-    expect(await screen.findByText(/6 of 6 shown/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'United States' })).not.toBeInTheDocument()
+    expect(await screen.findByText(/4 of 4 shown/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /show all country/i }))
-    expect(screen.getByRole('button', { name: 'United States' })).toBeInTheDocument()
+    const country = screen.getByPlaceholderText(/search country/i)
+    const state = screen.getByPlaceholderText(/select country first/i)
+    const city = screen.getByPlaceholderText(/select parent location first/i)
 
-    await user.click(screen.getByRole('button', { name: 'France' }))
+    expect(state).toBeDisabled()
+    expect(city).toBeDisabled()
 
-    expect(screen.getByRole('button', { name: '\u00CEle-de-France' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'TX' })).not.toBeInTheDocument()
+    await user.type(country, 'United States')
+
+    expect(screen.getByText(/2 of 4 shown/i)).toBeInTheDocument()
+    expect(state).toBeEnabled()
+    expect(city).toBeDisabled()
+
+    await user.type(state, 'TX')
+    expect(city).toBeEnabled()
+
+    await user.type(city, 'Austin')
+    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /open us austin contact/i })).toBeInTheDocument()
+
+    await user.clear(country)
+    await user.type(country, 'France')
+
+    expect(state).toHaveValue('')
+    expect(city).toHaveValue('')
+    expect(city).toBeDisabled()
+    expect(screen.getByText(/1 of 4 shown/i)).toBeInTheDocument()
+
+    await user.type(state, '\u00CEle-de-France')
+    await user.type(city, 'Nowhere')
+
+    expect(screen.getByText(/No City results/i)).toBeInTheDocument()
   })
 
   it('saves the current filter combination as a reusable local list', async () => {

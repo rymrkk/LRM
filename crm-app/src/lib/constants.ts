@@ -42,22 +42,28 @@ export const OPTIONAL_COLUMNS: ContactColumnKey[] = [
   'sources',
 ]
 
-export const FILTER_KEYS: FilterKey[] = [
+export const BUSINESS_FILTER_KEYS: FilterKey[] = [
   'seniority',
   'job_function',
   'job_sector',
-  'country',
-  'state',
   'employee_range',
+]
+
+export const LOCATION_FILTER_KEYS: FilterKey[] = ['country', 'state', 'city']
+
+export const FILTER_KEYS: FilterKey[] = [
+  ...BUSINESS_FILTER_KEYS,
+  ...LOCATION_FILTER_KEYS,
 ]
 
 export const EMPTY_FILTERS: ContactFilters = {
   seniority: [],
   job_function: [],
   job_sector: [],
+  employee_range: [],
   country: [],
   state: [],
-  employee_range: [],
+  city: [],
 }
 
 export const PHONE_PRIORITY = [

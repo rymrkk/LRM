@@ -20,6 +20,12 @@ export type ContactFilterCriteria = {
   searchQuery?: string
 }
 
+export type LocationFilterIndex = {
+  countries: string[]
+  statesByCountry: Record<string, string[]>
+  citiesByCountryState: Record<string, Record<string, string[]>>
+}
+
 export type ContactsWorkspace = {
   contacts: ContactRecord[]
   companies: CompanySummary[]
@@ -124,9 +130,10 @@ function createEmptyFilters(): ContactFilters {
     seniority: [],
     job_function: [],
     job_sector: [],
+    employee_range: [],
     country: [],
     state: [],
-    employee_range: [],
+    city: [],
   }
 }
 
@@ -171,6 +178,28 @@ function contactMatchesSearch(contact: ContactRecord, query: string): boolean {
   )
 }
 
+function normalizeCityDisplayValue(value: unknown): string {
+  const normalizedValue = normalizeCell(value)
+
+  if (!normalizedValue || normalizedValue === '-' || normalizedValue.toLocaleUpperCase() === '#NAME?' || /^\d+$/.test(normalizedValue)) {
+    return ''
+  }
+
+  return normalizedValue
+}
+
+function normalizeFilterValue(key: FilterKey, value: unknown): string {
+  if (key === 'state') {
+    return normalizeSearchText(normalizeRegionDisplayValue(value))
+  }
+
+  if (key === 'city') {
+    return normalizeSearchText(normalizeCityDisplayValue(value))
+  }
+
+  return normalizeSearchText(value)
+}
+
 function contactMatchesFilters(contact: ContactRecord, filters: ContactFilters): boolean {
   return FILTER_KEYS.every((key) => {
     const selectedValues = filters[key]
@@ -179,10 +208,8 @@ function contactMatchesFilters(contact: ContactRecord, filters: ContactFilters):
       return true
     }
 
-    const contactValue = normalizeSearchText(key === 'state' ? normalizeRegionDisplayValue(contact[key]) : contact[key])
-    return selectedValues.some((value) =>
-      normalizeSearchText(key === 'state' ? normalizeRegionDisplayValue(value) : value) === contactValue,
-    )
+    const contactValue = normalizeFilterValue(key, contact[key])
+    return selectedValues.some((value) => normalizeFilterValue(key, value) === contactValue)
   })
 }
 
@@ -273,7 +300,11 @@ export function extractFilterOptions(contacts: readonly ContactRecord[]): Contac
 
   FILTER_KEYS.forEach((key) => {
     options[key] = uniqueNonBlank(
-      contacts.map((contact) => (key === 'state' ? normalizeRegionDisplayValue(contact[key]) : contact[key])),
+      contacts.map((contact) => {
+        if (key === 'state') return normalizeRegionDisplayValue(contact[key])
+        if (key === 'city') return normalizeCityDisplayValue(contact[key])
+        return contact[key]
+      }),
       true,
     )
   })
@@ -281,6 +312,61 @@ export function extractFilterOptions(contacts: readonly ContactRecord[]): Contac
   return options
 }
 
+
+export function buildLocationFilterIndex(contacts: readonly ContactRecord[]): LocationFilterIndex {
+  const countries = new Set<string>()
+  const statesByCountry = new Map<string, Set<string>>()
+  const citiesByCountryState = new Map<string, Map<string, Set<string>>>()
+
+  contacts.forEach((contact) => {
+    const country = normalizeCell(contact.country)
+
+    if (!country) {
+      return
+    }
+
+    const rawState = normalizeCell(contact.state)
+    const state = normalizeRegionDisplayValue(contact.state)
+    const city = rawState && !state ? '' : normalizeCityDisplayValue(contact.city)
+    countries.add(country)
+
+    if (state) {
+      const countryStates = statesByCountry.get(country) ?? new Set<string>()
+      countryStates.add(state)
+      statesByCountry.set(country, countryStates)
+    }
+
+    if (city) {
+      const stateKey = state || ''
+      const countryCities = citiesByCountryState.get(country) ?? new Map<string, Set<string>>()
+      const stateCities = countryCities.get(stateKey) ?? new Set<string>()
+      stateCities.add(city)
+      countryCities.set(stateKey, stateCities)
+      citiesByCountryState.set(country, countryCities)
+    }
+  })
+
+  return {
+    countries: Array.from(countries).sort(sortText),
+    statesByCountry: Object.fromEntries(
+      Array.from(statesByCountry.entries())
+        .sort(([countryA], [countryB]) => sortText(countryA, countryB))
+        .map(([country, states]) => [country, Array.from(states).sort(sortText)]),
+    ),
+    citiesByCountryState: Object.fromEntries(
+      Array.from(citiesByCountryState.entries())
+        .sort(([countryA], [countryB]) => sortText(countryA, countryB))
+        .map(([country, stateMap]) => [
+          country,
+          Object.fromEntries(
+            Array.from(stateMap.entries())
+              .sort(([stateA], [stateB]) => sortText(stateA, stateB))
+              .map(([state, cities]) => [state, Array.from(cities).sort(sortText)]),
+          ),
+        ]),
+    ),
+  }
+}
 export function groupContactsByCompany(contacts: readonly ContactRecord[]): CompanySummary[] {
   const groupedContacts = new Map<string, ContactRecord[]>()
 

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   APP_NAME,
   DEFAULT_VISIBLE_COLUMNS,
+  BUSINESS_FILTER_KEYS,
   EMPTY_FILTERS,
   FILTER_KEYS,
   INITIAL_EXPECTED_ROW_COUNT,
+  LOCATION_FILTER_KEYS,
   OPTIONAL_COLUMNS,
   PHONE_PRIORITY,
   REQUIRED_CONTACT_HEADERS,
@@ -46,13 +48,21 @@ describe('CRM constants', () => {
   })
 
   it('keeps supported filters aligned with an empty filter state object', () => {
+    expect(BUSINESS_FILTER_KEYS).toEqual([
+      'seniority',
+      'job_function',
+      'job_sector',
+      'employee_range',
+    ])
+    expect(LOCATION_FILTER_KEYS).toEqual(['country', 'state', 'city'])
     expect(FILTER_KEYS).toEqual([
       'seniority',
       'job_function',
       'job_sector',
+      'employee_range',
       'country',
       'state',
-      'employee_range',
+      'city',
     ])
 
     expect(Object.keys(EMPTY_FILTERS)).toEqual(FILTER_KEYS)

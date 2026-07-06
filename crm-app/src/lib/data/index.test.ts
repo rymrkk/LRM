@@ -3,6 +3,7 @@ import { EMPTY_FILTERS, REQUIRED_CONTACT_HEADERS } from '../constants'
 import type { ContactRecord } from '../../types/contact'
 import {
   buildContactsWorkspace,
+  buildLocationFilterIndex,
   countCsvDataRows,
   deserializeSavedListFilters,
   deriveBestPhone,
@@ -169,6 +170,7 @@ describe('CSV contact data utilities', () => {
       country: ['Singapore', 'United Kingdom', 'United States'],
       state: ['VA'],
       employee_range: ['1001-5000', '501-1000'],
+      city: [],
     })
   })
 
@@ -191,6 +193,62 @@ describe('CSV contact data utilities', () => {
       'Virginia',
     ])
     expect(contacts[4].state).toBe('\u221A\u00E9le-de-France')
+  })
+
+  it('builds cascading location options from valid country, state, and city values', () => {
+    const contacts: ContactRecord[] = [
+      {
+        ...sampleContacts[0],
+        id: 'us-1',
+        country: 'United States',
+        state: 'TX',
+        city: 'Austin',
+      },
+      {
+        ...sampleContacts[0],
+        id: 'us-2',
+        country: 'United States',
+        state: 'TX',
+        city: 'Dallas',
+      },
+      {
+        ...sampleContacts[0],
+        id: 'us-3',
+        country: 'United States',
+        state: '#NAME?',
+        city: 'Austin',
+      },
+      {
+        ...sampleContacts[0],
+        id: 'fr-1',
+        country: 'France',
+        state: '\u221A\u00E9le-de-France',
+        city: 'Paris',
+      },
+      {
+        ...sampleContacts[0],
+        id: 'blank-1',
+        country: '',
+        state: 'TX',
+        city: 'Hidden City',
+      },
+    ]
+
+    const index = buildLocationFilterIndex(contacts)
+
+    expect(index.countries).toEqual(['France', 'United States'])
+    expect(index.statesByCountry).toEqual({
+      France: ['\u00CEle-de-France'],
+      'United States': ['TX'],
+    })
+    expect(index.citiesByCountryState).toEqual({
+      France: {
+        '\u00CEle-de-France': ['Paris'],
+      },
+      'United States': {
+        TX: ['Austin', 'Dallas'],
+      },
+    })
   })
   it('groups contacts by company name with country summaries', () => {
     expect(groupContactsByCompany(sampleContacts)).toEqual([
@@ -219,7 +277,7 @@ describe('CSV contact data utilities', () => {
     })
 
     expect(serialized).toBe(
-      '{"seniority":["Manager"],"job_function":[],"job_sector":[],"country":["Singapore"],"state":[],"employee_range":[]}',
+      '{"seniority":["Manager"],"job_function":[],"job_sector":[],"employee_range":[],"country":["Singapore"],"state":[],"city":[]}',
     )
     expect(deserializeSavedListFilters(serialized)).toEqual({
       ...EMPTY_FILTERS,

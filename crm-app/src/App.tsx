@@ -17,6 +17,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   APP_NAME,
+  BUSINESS_FILTER_KEYS,
   DEFAULT_VISIBLE_COLUMNS,
   EMPTY_FILTERS,
   FILTER_KEYS,
@@ -25,9 +26,9 @@ import {
 } from './lib/constants'
 import {
   buildContactsWorkspace,
+  buildLocationFilterIndex,
   deriveBestPhone,
   deserializeSavedListFilters,
-  extractFilterOptions,
   loadContactsJson,
   parseContactsCsv,
 } from './lib/data'
@@ -52,9 +53,10 @@ const FALLBACK_FILTER_OPTIONS: Record<FilterKey, string[]> = {
   seniority: ['Executive', 'Director', 'Head', 'Founder'],
   job_function: ['Sales', 'IT', 'Operations', 'Leadership'],
   job_sector: ['Software', 'Consulting', 'Data Services'],
+  employee_range: ['51-200', '201-500', '501-1000'],
   country: ['United States', 'Canada', 'Singapore'],
   state: ['TX', 'WA', 'MA', 'CO'],
-  employee_range: ['51-200', '201-500', '501-1000'],
+  city: ['Austin', 'Boston', 'Denver', 'Seattle'],
 }
 
 const SAMPLE_CONTACTS: ContactRecord[] = [
@@ -386,7 +388,7 @@ const COLUMN_LABELS: Partial<Record<ContactColumnKey, string>> = {
   job_sector: 'Job sector',
   employees: 'Employees',
   employee_range: 'Employee range',
-  state: 'Region / State',
+  state: 'State / Province',
   postal_code: 'Postal code',
   executive_linkedin_profile: 'LinkedIn profile',
   sources: 'Sources',
@@ -525,6 +527,23 @@ function App() {
         : [...currentValues, value]
 
       return { ...currentFilters, [filter]: nextValues }
+    })
+  }
+
+  function setLocationFilter(filter: Extract<FilterKey, 'country' | 'state' | 'city'>, value: string) {
+    setFilters((currentFilters) => {
+      const nextFilters = { ...currentFilters, [filter]: value ? [value] : [] }
+
+      if (filter === 'country') {
+        nextFilters.state = []
+        nextFilters.city = []
+      }
+
+      if (filter === 'state') {
+        nextFilters.city = []
+      }
+
+      return nextFilters
     })
   }
 
@@ -669,7 +688,7 @@ function App() {
             <p className="metric-label">trusted contacts</p>
           </div>
           <div>
-            <p className="metric-value">{FILTER_KEYS.length}</p>
+            <p className="metric-value">{BUSINESS_FILTER_KEYS.length + 1}</p>
             <p className="metric-label">filter groups</p>
           </div>
           <div>
@@ -680,6 +699,7 @@ function App() {
 
         {activeView === 'contacts' && (
           <ContactsPage
+            allContacts={contacts}
             contacts={workspace.contacts}
             filterOptions={workspace.filterOptions}
             filters={filters}
@@ -687,6 +707,7 @@ function App() {
             onClearFilters={clearFilters}
             onOpenContact={setSelectedContact}
             onSaveList={saveCurrentList}
+            onSetLocationFilter={setLocationFilter}
             onToggleFilter={toggleFilter}
             totalCount={workspace.totalCount}
           />
@@ -707,7 +728,135 @@ function App() {
   )
 }
 
+
+type LocationCascadeFiltersProps = {
+  cityOptions: string[]
+  cityValue: string
+  countryOptions: string[]
+  countryValue: string
+  onChange: (filter: Extract<FilterKey, 'country' | 'state' | 'city'>, value: string) => void
+  stateOptions: string[]
+  stateValue: string
+}
+
+function LocationCascadeFilters({
+  cityOptions,
+  cityValue,
+  countryOptions,
+  countryValue,
+  onChange,
+  stateOptions,
+  stateValue,
+}: LocationCascadeFiltersProps) {
+  const stateDisabled = !countryValue
+  const cityDisabled = !countryValue || (stateOptions.length > 0 && !stateValue)
+
+  return (
+    <div className="location-cascade" aria-label="Location filters">
+      <SearchableCombobox
+        label="Country"
+        noResultsLabel="No Country results"
+        onCommit={(value) => onChange('country', value)}
+        options={countryOptions}
+        placeholder="Search country"
+        value={countryValue}
+      />
+      <SearchableCombobox
+        disabled={stateDisabled}
+        disabledHint="Select a Country first."
+        label="State / Province"
+        noResultsLabel="No State / Province results"
+        onCommit={(value) => onChange('state', value)}
+        options={stateOptions}
+        placeholder={stateDisabled ? 'Select Country first' : 'Search state or province'}
+        value={stateValue}
+      />
+      <SearchableCombobox
+        disabled={cityDisabled}
+        disabledHint={countryValue ? 'Select a State / Province first.' : 'Select a Country first.'}
+        label="City"
+        noResultsLabel="No City results"
+        onCommit={(value) => onChange('city', value)}
+        options={cityOptions}
+        placeholder={cityDisabled ? 'Select parent location first' : 'Search city'}
+        value={cityValue}
+      />
+    </div>
+  )
+}
+
+type SearchableComboboxProps = {
+  disabled?: boolean
+  disabledHint?: string
+  label: string
+  noResultsLabel: string
+  onCommit: (value: string) => void
+  options: string[]
+  placeholder: string
+  value: string
+}
+
+function SearchableCombobox({
+  disabled = false,
+  disabledHint,
+  label,
+  noResultsLabel,
+  onCommit,
+  options,
+  placeholder,
+  value,
+}: SearchableComboboxProps) {
+  const [inputValue, setInputValue] = useState(value)
+  const listId = `${label.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-')}-options`
+  const normalizedInput = inputValue.trim().toLocaleLowerCase()
+  const filteredOptions = normalizedInput
+    ? options.filter((option) => option.toLocaleLowerCase().includes(normalizedInput))
+    : options
+  const hasNoResults = !disabled && inputValue.trim().length > 0 && filteredOptions.length === 0
+
+  useEffect(() => {
+    setInputValue(value)
+  }, [value])
+
+  function updateValue(nextValue: string) {
+    setInputValue(nextValue)
+
+    if (!nextValue) {
+      onCommit('')
+      return
+    }
+
+    const exactOption = options.find((option) => option.toLocaleLowerCase() === nextValue.trim().toLocaleLowerCase())
+
+    if (exactOption) {
+      onCommit(exactOption)
+    }
+  }
+
+  return (
+    <label className="field-stack cascade-control">
+      <span>{label}</span>
+      <input
+        disabled={disabled}
+        list={disabled ? undefined : listId}
+        onChange={(event) => updateValue(event.target.value)}
+        placeholder={placeholder}
+        value={inputValue}
+      />
+      {!disabled && (
+        <datalist id={listId}>
+          {filteredOptions.map((option) => (
+            <option value={option} key={option} />
+          ))}
+        </datalist>
+      )}
+      {disabled && disabledHint && <span className="cascade-status">{disabledHint}</span>}
+      {hasNoResults && <span className="cascade-status">{noResultsLabel}</span>}
+    </label>
+  )
+}
 type ContactsPageProps = {
+  allContacts: ContactRecord[]
   contacts: ContactRecord[]
   filterOptions: Record<FilterKey, string[]>
   filters: Partial<Record<FilterKey, string[]>>
@@ -715,11 +864,13 @@ type ContactsPageProps = {
   onClearFilters: () => void
   onOpenContact: (contact: ContactRecord) => void
   onSaveList: (name: string) => void
+  onSetLocationFilter: (filter: Extract<FilterKey, 'country' | 'state' | 'city'>, value: string) => void
   onToggleFilter: (filter: FilterKey, value: string) => void
   totalCount: number
 }
 
 function ContactsPage({
+  allContacts,
   contacts,
   filterOptions,
   filters,
@@ -727,6 +878,7 @@ function ContactsPage({
   onClearFilters,
   onOpenContact,
   onSaveList,
+  onSetLocationFilter,
   onToggleFilter,
   totalCount,
 }: ContactsPageProps) {
@@ -735,15 +887,18 @@ function ContactsPage({
   const [expandedFilters, setExpandedFilters] = useState<FilterKey[]>([])
   const [isSaveListFormOpen, setIsSaveListFormOpen] = useState(false)
   const [saveListName, setSaveListName] = useState('')
-  const activeFilterOptions = useMemo(() => {
-    const nextOptions = { ...filterOptions }
-
-    if ((filters.country ?? []).length > 0) {
-      nextOptions.state = extractFilterOptions(contacts).state
-    }
-
-    return nextOptions
-  }, [contacts, filterOptions, filters.country])
+  const locationIndex = useMemo(() => buildLocationFilterIndex(allContacts), [allContacts])
+  const countryValue = filters.country?.[0] ?? ''
+  const stateValue = filters.state?.[0] ?? ''
+  const cityValue = filters.city?.[0] ?? ''
+  const stateOptions = countryValue ? (locationIndex.statesByCountry[countryValue] ?? []) : []
+  const cityOptions = countryValue
+    ? stateOptions.length > 0
+      ? stateValue
+        ? (locationIndex.citiesByCountryState[countryValue]?.[stateValue] ?? [])
+        : []
+      : (locationIndex.citiesByCountryState[countryValue]?.[''] ?? [])
+    : []
   const hasActiveFilters = FILTER_KEYS.some((filter) => (filters[filter] ?? []).length > 0)
   const allColumns = useMemo(() => [...DEFAULT_VISIBLE_COLUMNS, ...OPTIONAL_COLUMNS], [])
   const [visibleColumns, setVisibleColumns] = useState<ContactColumnKey[]>(DEFAULT_VISIBLE_COLUMNS)
@@ -783,7 +938,7 @@ function ContactsPage({
   }
 
   function getFilterOptions(filter: FilterKey) {
-    const sourceOptions = activeFilterOptions[filter].length > 0 ? activeFilterOptions[filter] : FALLBACK_FILTER_OPTIONS[filter]
+    const sourceOptions = filterOptions[filter].length > 0 ? filterOptions[filter] : FALLBACK_FILTER_OPTIONS[filter]
     const matchingOptions = sourceOptions.filter((option) =>
       option.toLocaleLowerCase().includes(filterSearchQuery.trim().toLocaleLowerCase()),
     )
@@ -835,8 +990,17 @@ function ContactsPage({
         <button className="secondary-action clear-filters-button" type="button" onClick={onClearFilters} disabled={!hasActiveFilters}>
           Clear filters
         </button>
+        <LocationCascadeFilters
+          cityOptions={cityOptions}
+          cityValue={cityValue}
+          countryOptions={locationIndex.countries}
+          countryValue={countryValue}
+          onChange={onSetLocationFilter}
+          stateOptions={stateOptions}
+          stateValue={stateValue}
+        />
         <div className="filter-stack">
-          {FILTER_KEYS.map((filter) => (
+          {BUSINESS_FILTER_KEYS.map((filter) => (
             <div className="filter-group" key={filter}>
               <p className="filter-label">{labelForColumn(filter)}</p>
               <div className="filter-list">
@@ -856,7 +1020,7 @@ function ContactsPage({
                     )
                   })}
               </div>
-              {!filterSearchQuery.trim() && activeFilterOptions[filter].length > 5 && (
+              {!filterSearchQuery.trim() && filterOptions[filter].length > 5 && (
                 <button className="filter-more-button" type="button" onClick={() => toggleExpandedFilter(filter)}>
                   {expandedFilters.includes(filter) ? `Show fewer ${labelForColumn(filter)}` : `Show all ${labelForColumn(filter)}`}
                 </button>
