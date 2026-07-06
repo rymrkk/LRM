@@ -172,6 +172,27 @@ describe('CSV contact data utilities', () => {
     })
   })
 
+  it('sanitizes state filter options for display without mutating contact rows', () => {
+    const contacts = [
+      { ...sampleContacts[0], id: 'artifact-1', state: '-' },
+      { ...sampleContacts[0], id: 'artifact-2', state: '#NAME?' },
+      { ...sampleContacts[0], id: 'artifact-3', state: '2450' },
+      { ...sampleContacts[0], id: 'artifact-4', state: '88 Queensway' },
+      { ...sampleContacts[0], id: 'artifact-5', state: 'âˆšÃ©le-de-France' },
+      { ...sampleContacts[0], id: 'artifact-6', state: '?l?skie' },
+      { ...sampleContacts[0], id: 'artifact-7', state: 'â‰ˆÃ…âˆšâ‰¥dâ‰ˆâˆ« Voivodeship' },
+      { ...sampleContacts[0], id: 'valid-1', state: 'Virginia' },
+    ]
+
+    expect(extractFilterOptions(contacts).state).toEqual([
+      'ÃŽle-de-France',
+      'ÅÃ³dÅº Voivodeship',
+      'ÅšlÄ…skie',
+      'Virginia',
+    ])
+    expect(contacts[4].state).toBe('âˆšÃ©le-de-France')
+  })
+
   it('groups contacts by company name with country summaries', () => {
     expect(groupContactsByCompany(sampleContacts)).toEqual([
       {

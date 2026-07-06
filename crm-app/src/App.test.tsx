@@ -23,6 +23,7 @@ describe('App shell', () => {
     expect(screen.getByRole('group', { name: /column picker/i })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: /all contacts/i })).toBeInTheDocument()
     expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Region / State').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /save as list/i })).toBeInTheDocument()
   })
 

@@ -171,7 +171,7 @@ const COLUMN_LABELS: Partial<Record<ContactColumnKey, string>> = {
   job_sector: 'Job sector',
   employees: 'Employees',
   employee_range: 'Employee range',
-  state: 'State',
+  state: 'Region / State',
   postal_code: 'Postal code',
   executive_linkedin_profile: 'LinkedIn profile',
   sources: 'Sources',

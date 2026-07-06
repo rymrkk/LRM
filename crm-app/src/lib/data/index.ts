@@ -81,6 +81,40 @@ function normalizeSearchText(value: unknown): string {
   return normalizeCell(value).toLocaleLowerCase()
 }
 
+const REGION_DISPLAY_VALUE_OVERRIDES = new Map<string, string>([
+  ['?l?skie', 'Śląskie'],
+  ['województwo ?ódzkie', 'Łódź Voivodeship'],
+  ['√éle-de-France', 'Île-de-France'],
+  ['≈Å√≥d≈∫ Voivodeship', 'Łódź Voivodeship'],
+  ['Â Luzon', 'Luzon'],
+  ['Ã‚Â Luzon', 'Luzon'],
+])
+
+function normalizeRegionDisplayValue(value: unknown): string {
+  const normalizedValue = normalizeCell(value)
+
+  if (!normalizedValue) {
+    return ''
+  }
+
+  const override = REGION_DISPLAY_VALUE_OVERRIDES.get(normalizedValue)
+
+  if (override) {
+    return override
+  }
+
+  if (
+    normalizedValue === '-' ||
+    normalizedValue.toLocaleUpperCase() === '#NAME?' ||
+    /^\d+$/.test(normalizedValue) ||
+    /^\d+\s+\S+/.test(normalizedValue)
+  ) {
+    return ''
+  }
+
+  return normalizedValue
+}
+
 function sortText(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: 'base' })
 }
@@ -145,8 +179,10 @@ function contactMatchesFilters(contact: ContactRecord, filters: ContactFilters):
       return true
     }
 
-    const contactValue = normalizeSearchText(contact[key])
-    return selectedValues.some((value) => normalizeSearchText(value) === contactValue)
+    const contactValue = normalizeSearchText(key === 'state' ? normalizeRegionDisplayValue(contact[key]) : contact[key])
+    return selectedValues.some((value) =>
+      normalizeSearchText(key === 'state' ? normalizeRegionDisplayValue(value) : value) === contactValue,
+    )
   })
 }
 
@@ -237,7 +273,7 @@ export function extractFilterOptions(contacts: readonly ContactRecord[]): Contac
 
   FILTER_KEYS.forEach((key) => {
     options[key] = uniqueNonBlank(
-      contacts.map((contact) => contact[key]),
+      contacts.map((contact) => (key === 'state' ? normalizeRegionDisplayValue(contact[key]) : contact[key])),
       true,
     )
   })
