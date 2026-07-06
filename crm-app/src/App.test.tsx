@@ -16,7 +16,7 @@ describe('App shell', () => {
     expect(screen.getByRole('link', { name: /companies/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /saved lists/i })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: /workspace/i })).toHaveDisplayValue('10124 Users')
-    expect(screen.getByText(/47,613 cleaned contacts ready for import/i)).toBeInTheDocument()
+    expect(screen.getByText(/47,613 contacts available in this workspace/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create workspace/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /upload csv/i })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: /filters/i })).toBeInTheDocument()
@@ -45,6 +45,30 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: /open executive contacts/i })).toBeInTheDocument()
   })
 
+
+  it('creates, reads, and deletes a local CSV workspace', async () => {
+    const user = userEvent.setup()
+    const csv = [
+      'id,name,email,company_name,job_title,seniority,job_function,job_sector,city,state,country,employee_range',
+      'local-001,Avery Chen,avery@example.com,LocalCo,RevOps Lead,Lead,Operations,Consulting,Manila,NCR,Philippines,11-50',
+    ].join('\n')
+    const file = new File([csv], 'enterprise-leads.csv', { type: 'text/csv' })
+
+    render(<App />)
+
+    await user.upload(screen.getByLabelText(/csv file/i), file)
+
+    expect(screen.getByRole('combobox', { name: /workspace/i })).toHaveDisplayValue('enterprise-leads.csv')
+    expect(screen.getByText(/1 of 1 shown/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /open avery chen/i })).toBeInTheDocument()
+    expect(window.localStorage.getItem('lrm:workspace-10124:local-workspaces')).toContain('enterprise-leads.csv')
+
+    await user.click(screen.getByRole('button', { name: /delete workspace/i }))
+
+    expect(screen.getByRole('combobox', { name: /workspace/i })).toHaveDisplayValue('10124 Users')
+    expect(screen.getByText(/4 of 4 shown/i)).toBeInTheDocument()
+    expect(window.localStorage.getItem('lrm:workspace-10124:local-workspaces')).not.toContain('enterprise-leads.csv')
+  })
   it('virtualizes static JSON contacts instead of mounting every row', async () => {
     const contacts = Array.from({ length: 150 }, (_, index) => ({
       id: `json-${index}`,

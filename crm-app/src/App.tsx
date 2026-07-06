@@ -29,6 +29,7 @@ import {
   deserializeSavedListFilters,
   extractFilterOptions,
   loadContactsJson,
+  parseContactsCsv,
 } from './lib/data'
 import type { CompanySummary, ContactColumnKey, ContactRecord } from './types/contact'
 import type { FilterKey, SavedList } from './types/workspace'
@@ -145,6 +146,7 @@ const WORKSPACE_ID = 'workspace-10124'
 const USER_ID = 'single-user'
 const SAVED_LISTS_STORAGE_KEY = 'lrm:workspace-10124:saved-lists'
 const CONTACT_ANNOTATIONS_STORAGE_KEY = 'lrm:workspace-10124:contact-annotations'
+const LOCAL_WORKSPACES_STORAGE_KEY = 'lrm:workspace-10124:local-workspaces'
 
 const SAVED_LISTS: SavedList[] = [
   {
@@ -193,6 +195,67 @@ function normalizeStoredContactAnnotation(row: unknown): ContactAnnotation {
   return {
     notes: typeof candidate.notes === 'string' ? candidate.notes : '',
     tags: typeof candidate.tags === 'string' ? candidate.tags : '',
+  }
+}
+
+
+
+type LocalWorkspace = {
+  id: string
+  name: string
+  originalFilename: string
+  rowCount: number
+  contacts: ContactRecord[]
+  createdAt: string
+  updatedAt: string
+}
+
+function normalizeStoredLocalWorkspace(row: unknown): LocalWorkspace | null {
+  if (!row || typeof row !== 'object') return null
+  const candidate = row as Partial<LocalWorkspace>
+  const name = typeof candidate.name === 'string' ? candidate.name.trim() : ''
+  if (!name || !Array.isArray(candidate.contacts)) return null
+  const now = new Date().toISOString()
+  const contacts = candidate.contacts.map((contact) => contact as ContactRecord)
+  return {
+    id: typeof candidate.id === 'string' && candidate.id ? candidate.id : createClientId('workspace'),
+    name,
+    originalFilename: typeof candidate.originalFilename === 'string' ? candidate.originalFilename : name,
+    rowCount: contacts.length,
+    contacts,
+    createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : now,
+    updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : now,
+  }
+}
+
+function readLocalWorkspacesFromStorage(): LocalWorkspace[] {
+  if (typeof window === 'undefined') return []
+  const rawValue = window.localStorage.getItem(LOCAL_WORKSPACES_STORAGE_KEY)
+  if (!rawValue) return []
+  try {
+    const parsed = JSON.parse(rawValue) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizeStoredLocalWorkspace).filter((workspace): workspace is LocalWorkspace => workspace !== null)
+  } catch {
+    return []
+  }
+}
+
+function persistLocalWorkspaces(workspaces: readonly LocalWorkspace[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(LOCAL_WORKSPACES_STORAGE_KEY, JSON.stringify(workspaces))
+}
+
+function createLocalWorkspace(fileName: string, contacts: ContactRecord[]): LocalWorkspace {
+  const now = new Date().toISOString()
+  return {
+    id: createClientId('workspace'),
+    name: fileName,
+    originalFilename: fileName,
+    rowCount: contacts.length,
+    contacts,
+    createdAt: now,
+    updatedAt: now,
   }
 }
 
@@ -367,11 +430,16 @@ function getColumnWidth(column: ContactColumnKey) {
 function App() {
   const [activeView, setActiveView] = useState<ViewKey>('contacts')
   const [selectedContact, setSelectedContact] = useState<ContactRecord | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [defaultContacts, setDefaultContacts] = useState<ContactRecord[]>(SAMPLE_CONTACTS)
   const [contacts, setContacts] = useState<ContactRecord[]>(SAMPLE_CONTACTS)
   const [filters, setFilters] = useState<Partial<Record<FilterKey, string[]>>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [savedLists, setSavedLists] = useState<SavedList[]>(readSavedListsFromStorage)
   const [contactAnnotations, setContactAnnotations] = useState<ContactAnnotations>(readContactAnnotationsFromStorage)
+  const [localWorkspaces, setLocalWorkspaces] = useState<LocalWorkspace[]>(readLocalWorkspacesFromStorage)
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(WORKSPACE_ID)
+  const [workspaceError, setWorkspaceError] = useState('')
 
   useEffect(() => {
     if (typeof fetch !== 'function') return
@@ -379,18 +447,75 @@ function App() {
     let isMounted = true
 
     loadContactsJson(fetch, '/data/contacts.json', SAMPLE_CONTACTS).then((result) => {
-      if (isMounted && result.source === 'static-json') setContacts(result.contacts)
+      if (isMounted && result.source === 'static-json') {
+        setDefaultContacts(result.contacts)
+        setContacts((currentContacts) => (activeWorkspaceId === WORKSPACE_ID ? result.contacts : currentContacts))
+      }
     })
 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [activeWorkspaceId])
 
   const workspace = useMemo(
     () => buildContactsWorkspace(contacts, { filters, searchQuery }),
     [contacts, filters, searchQuery],
   )
+  const activeLocalWorkspace = localWorkspaces.find((localWorkspace) => localWorkspace.id === activeWorkspaceId)
+  const activeWorkspaceName = activeLocalWorkspace?.name ?? '10124 Users'
+  const activeWorkspaceRowCount = activeLocalWorkspace?.rowCount ?? INITIAL_EXPECTED_ROW_COUNT
+  const canDeleteActiveWorkspace = activeWorkspaceId !== WORKSPACE_ID
+
+  function resetWorkspaceView(nextContacts: ContactRecord[]) {
+    setContacts(nextContacts)
+    setFilters({})
+    setSearchQuery('')
+    setSelectedContact(null)
+    setActiveView('contacts')
+  }
+
+  function switchWorkspace(workspaceId: string) {
+    setWorkspaceError('')
+    setActiveWorkspaceId(workspaceId)
+    if (workspaceId === WORKSPACE_ID) {
+      resetWorkspaceView(defaultContacts)
+      return
+    }
+    const nextWorkspace = localWorkspaces.find((localWorkspace) => localWorkspace.id === workspaceId)
+    if (nextWorkspace) resetWorkspaceView(nextWorkspace.contacts)
+  }
+
+  async function uploadCsvWorkspace(file: File | undefined) {
+    if (!file) return
+    try {
+      const csv = await file.text()
+      const parsed = parseContactsCsv(csv)
+      const localWorkspace = createLocalWorkspace(file.name, parsed.contacts)
+      setLocalWorkspaces((currentWorkspaces) => {
+        const nextWorkspaces = [localWorkspace, ...currentWorkspaces]
+        persistLocalWorkspaces(nextWorkspaces)
+        return nextWorkspaces
+      })
+      setActiveWorkspaceId(localWorkspace.id)
+      setWorkspaceError('')
+      resetWorkspaceView(localWorkspace.contacts)
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : 'CSV workspace could not be imported.')
+    }
+  }
+
+  function deleteActiveWorkspace() {
+    if (activeWorkspaceId === WORKSPACE_ID) return
+    setLocalWorkspaces((currentWorkspaces) => {
+      const nextWorkspaces = currentWorkspaces.filter((workspaceOption) => workspaceOption.id !== activeWorkspaceId)
+      persistLocalWorkspaces(nextWorkspaces)
+      return nextWorkspaces
+    })
+    setActiveWorkspaceId(WORKSPACE_ID)
+    setWorkspaceError('')
+    resetWorkspaceView(defaultContacts)
+  }
 
   function toggleFilter(filter: FilterKey, value: string) {
     setFilters((currentFilters) => {
@@ -474,26 +599,46 @@ function App() {
 
         <section className="workspace-panel" aria-labelledby="workspace-title">
           <p className="eyebrow">Active workspace</p>
-          <h2 id="workspace-title">10124 Users</h2>
+          <h2 id="workspace-title">{activeWorkspaceName}</h2>
           <label className="workspace-select-control">
             <span className="field-label">Workspace</span>
-            <select className="workspace-select" defaultValue="10124 Users" aria-label="Workspace">
-              <option>10124 Users</option>
-              <option>North America prospects</option>
-              <option>Partner leads import</option>
+            <select className="workspace-select" value={activeWorkspaceId} onChange={(event) => switchWorkspace(event.target.value)} aria-label="Workspace">
+              <option value={WORKSPACE_ID}>10124 Users</option>
+              {localWorkspaces.map((localWorkspace) => (
+                <option value={localWorkspace.id} key={localWorkspace.id}>
+                  {localWorkspace.name}
+                </option>
+              ))}
             </select>
           </label>
-          <p>{INITIAL_EXPECTED_ROW_COUNT.toLocaleString()} cleaned contacts ready for import.</p>
+          <p>{activeWorkspaceRowCount.toLocaleString()} contacts available in this workspace.</p>
           <div className="workspace-actions">
-            <button className="secondary-action" type="button">
+            <button className="secondary-action" type="button" onClick={() => fileInputRef.current?.click()}>
               <UserPlus size={16} aria-hidden="true" />
               Create workspace
             </button>
-            <button className="primary-action" type="button">
+            <button className="primary-action" type="button" onClick={() => fileInputRef.current?.click()}>
               <Upload size={16} aria-hidden="true" />
               Upload CSV
             </button>
+            <label className="sr-only" htmlFor="workspace-csv-file">CSV file</label>
+            <input
+              accept=".csv,text/csv"
+              id="workspace-csv-file"
+              ref={fileInputRef}
+              type="file"
+              onChange={(event) => {
+                void uploadCsvWorkspace(event.target.files?.[0])
+                event.target.value = ''
+              }}
+            />
+            {canDeleteActiveWorkspace && (
+              <button className="secondary-action" type="button" onClick={deleteActiveWorkspace}>
+                Delete workspace
+              </button>
+            )}
           </div>
+          {workspaceError && <p className="workspace-error" role="alert">{workspaceError}</p>}
         </section>
       </aside>
 
